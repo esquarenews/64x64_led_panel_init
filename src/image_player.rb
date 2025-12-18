@@ -4,8 +4,10 @@ require 'optparse'
 require 'fileutils'
 require 'json'
 require 'open3'
+require 'net/http'
 require 'base64'
 require 'tempfile'
+require 'uri'
 
 begin
   require 'serialport'
@@ -13,11 +15,24 @@ rescue LoadError
   SerialPort = nil
 end
 
+
 begin
   require 'mini_magick'
+
+  # mini_magick is a wrapper; it still needs ImageMagick/GraphicsMagick binaries.
+  # If neither `mogrify` nor `magick` is available, force the `sips` fallback path.
+  unless system('command -v mogrify >/dev/null 2>&1') || system('command -v magick >/dev/null 2>&1')
+    warn 'ImageMagick not found (mogrify/magick missing); using sips fallback.'
+    MiniMagick = nil
+  end
 rescue LoadError
-  warn 'The mini_magick gem is required. Install it with `gem install mini_magick`.'
-  exit 1
+  MiniMagick = nil
+end
+
+begin
+  require 'chunky_png'
+rescue LoadError
+  ChunkyPNG = nil
 end
 
 DISPLAY_WIDTH = 192
@@ -31,9 +46,9 @@ DEFAULT_BLE_NAME = 'LRGPanel'
 BLE_RECONNECT_DELAY = 5
 MAX_RETRY_ATTEMPTS = 5
 SUPPORTED_EXTENSIONS = %w[.png .jpg .jpeg].freeze
-COLOR_GAMMA = 0.9
+COLOR_GAMMA = 1.0
 CHANNEL_GAIN = {
-  r: 0.75,
+  r: 0.90,
   g: 1.30,
   b: 1.30
 }.freeze
@@ -649,67 +664,685 @@ def build_static_payload(width, height, apply_correction: true)
   payload
 end
 
+
 def countdown_message(today = Date.today)
   target = Date.new(today.year, 12, 25)
   target = Date.new(today.year + 1, 12, 25) if today > target
   return 'Merry Christmas' if today == target
   days = (target - today).to_i
-  "#{days} days until Christmas"
+  unit = (days == 1) ? 'day' : 'days'
+  "#{days} #{unit} until Christmas"
 end
 
+# Compact version for sips fallback overlay
+def countdown_message_short(today = Date.today)
+  target = Date.new(today.year, 12, 25)
+  target = Date.new(today.year + 1, 12, 25) if today > target
+  return 'merry xmas' if today == target
+  days = (target - today).to_i
+  "#{days}d to Xmas"
+end
+
+def overlay_lines(text)
+  return [] if text.nil?
+  lines = text.is_a?(Array) ? text : text.to_s.split(/\r?\n/)
+  lines.map { |line| line.to_s.strip }.reject(&:empty?)
+end
+
+MELBOURNE_WEATHER_URL = 'https://api.open-meteo.com/v1/forecast?latitude=-37.81&longitude=144.96&current=temperature_2m&daily=temperature_2m_max&forecast_days=1&timezone=Australia/Melbourne'
+WEATHER_CACHE_TTL = 600 # seconds
+
+def parse_weather_payload(body)
+  payload = JSON.parse(body)
+  current = payload.dig('current', 'temperature_2m')
+  max = payload.dig('daily', 'temperature_2m_max', 0)
+  return nil unless current && max
+
+  "#{current.to_f.round(1)}C/#{max.to_f.round}C"
+rescue JSON::ParserError
+  nil
+end
+
+def fetch_melbourne_weather
+  if defined?(@weather_cache) && @weather_cache && (Time.now - @weather_cache[:timestamp] < WEATHER_CACHE_TTL)
+    return @weather_cache[:value]
+  end
+
+  body = nil
+  uri = URI(MELBOURNE_WEATHER_URL)
+  begin
+    response =
+      Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
+        http.open_timeout = 5
+        http.read_timeout = 5
+        http.get(uri.request_uri)
+      end
+
+    if response.is_a?(Net::HTTPSuccess)
+      body = response.body
+    else
+      warn "Weather HTTP #{response.code} #{response.message}"
+    end
+  rescue StandardError => e
+    warn "Weather fetch failed: #{e.message}"
+  end
+
+  if body.nil?
+    curl_out, curl_err, status = Open3.capture3('curl', '-s', MELBOURNE_WEATHER_URL)
+    if status.success? && !curl_out.strip.empty?
+      body = curl_out
+    else
+      warn "Weather curl fallback failed: #{curl_err.strip.empty? ? 'no output' : curl_err.strip}"
+    end
+  end
+
+  formatted = parse_weather_payload(body) if body
+  if formatted
+    @weather_cache = { value: formatted, timestamp: Time.now }
+    return formatted
+  end
+
+  warn 'Weather parse failed.'
+  nil
+end
+
+
 def draw_overlay(image, text)
-  return if text.nil? || text.empty?
-  safe = text.gsub("'", "\\\\'")
+  lines = overlay_lines(text)
+  return if lines.empty?
+  return if defined?(MiniMagick) && MiniMagick.nil?
+
+  point_size = 12
+  line_height = (point_size * 1.25).ceil
   image.combine_options do |c|
     c.gravity 'SouthEast'
     c.fill 'white'
     c.stroke 'none'
     c.strokewidth 0
     c.font 'Courier'
-    c.pointsize 12
-    c.draw "text 4,4 '#{safe}'"
+    c.pointsize point_size
+    lines.reverse_each.with_index do |line, idx|
+      safe = line.gsub("'", "\\\\'")
+      y_offset = 4 + (idx * line_height)
+      c.draw "text 4,#{y_offset} '#{safe}'"
+    end
   end
 end
 
-def prepare_payload(path, width, height, blur: nil, sharpen: nil, dither: false, color_correct: true)
-  image = MiniMagick::Image.open(path)
+# --- ChunkyPNG text overlay (for sips fallback) ---
+# A tiny 5x7 bitmap font. Each glyph is 7 rows of 5 bits ("#" = on, "." = off).
+BITFONT_5X7 = {
+  ' ' => %w[
+    .....
+    .....
+    .....
+    .....
+    .....
+    .....
+    .....
+  ],
 
-  image.resize "#{width}x#{height}!"
-  image.colorspace 'RGB'
-  image.blur "0x#{blur}" if blur
-  image.sharpen "0x#{sharpen}" if sharpen
-  if block_given?
-    yield image
-  end
-  if dither
-    image.dither 'FloydSteinberg'
-    image.colors 65536
-  end
+  # Digits
+  '0' => %w[
+    .###.
+    #...#
+    #..##
+    #.#.#
+    ##..#
+    #...#
+    .###.
+  ],
+  '1' => %w[
+    ..#..
+    .##..
+    ..#..
+    ..#..
+    ..#..
+    ..#..
+    .###.
+  ],
+  '2' => %w[
+    .###.
+    #...#
+    ....#
+    ...#.
+    ..#..
+    .#...
+    #####
+  ],
+  '3' => %w[
+    #####
+    ....#
+    ...#.
+    ..##.
+    ....#
+    #...#
+    .###.
+  ],
+  '4' => %w[
+    ...#.
+    ..##.
+    .#.#.
+    #..#.
+    #####
+    ...#.
+    ...#.
+  ],
+  '5' => %w[
+    #####
+    #....
+    ####.
+    ....#
+    ....#
+    #...#
+    .###.
+  ],
+  '6' => %w[
+    ..##.
+    .#...
+    #....
+    ####.
+    #...#
+    #...#
+    .###.
+  ],
+  '7' => %w[
+    #####
+    ....#
+    ...#.
+    ..#..
+    .#...
+    .#...
+    .#...
+  ],
+  '8' => %w[
+    .###.
+    #...#
+    #...#
+    .###.
+    #...#
+    #...#
+    .###.
+  ],
+  '9' => %w[
+    .###.
+    #...#
+    #...#
+    .####
+    ....#
+    ...#.
+    .##..
+  ],
 
-  pixels = image.get_pixels
-  if pixels.length != height || pixels.any? { |row| row.length != width }
-    raise "Image resize failed: got #{pixels.length}x#{pixels.first&.length}"
-  end
+  # Punctuation / symbols
+  '.' => %w[
+    .....
+    .....
+    .....
+    .....
+    .....
+    ..#..
+    ..#..
+  ],
+  ':' => %w[
+    .....
+    ..#..
+    ..#..
+    .....
+    ..#..
+    ..#..
+    .....
+  ],
+  '-' => %w[
+    .....
+    .....
+    .....
+    #####
+    .....
+    .....
+    .....
+  ],
+  '+' => %w[
+    .....
+    ..#..
+    ..#..
+    #####
+    ..#..
+    ..#..
+    .....
+  ],
+  '.' => %w[
+    .....
+    .....
+    .....
+    .....
+    .....
+    ..#..
+    ..#..
+  ],
+  '/' => %w[
+    ....#
+    ...#.
+    ...#.
+    ..#..
+    .#...
+    .#...
+    #....
+  ],
+  '°' => %w[
+    .##..
+    #..#.
+    #..#.
+    .##..
+    .....
+    .....
+    .....
+  ],
 
-  payload = String.new(capacity: width * height * 2, encoding: Encoding::BINARY)
-  pixels.each do |row|
-    row.each do |pixel|
-      r, g, b = pixel[0, 3] || [0, 0, 0]
-      if color_correct
-        r = apply_color_correction(r, CHANNEL_GAIN[:r])
-        g = apply_color_correction(g, CHANNEL_GAIN[:g])
-        b = apply_color_correction(b, CHANNEL_GAIN[:b])
+  # Lowercase alphabet a–z
+  'a' => %w[
+    .....
+    .....
+    .###.
+    ....#
+    .####
+    #...#
+    .####
+  ],
+  'b' => %w[
+    #....
+    #....
+    ####.
+    #...#
+    #...#
+    #...#
+    ####.
+  ],
+  'c' => %w[
+    .....
+    .....
+    .###.
+    #...#
+    #....
+    #...#
+    .###.
+  ],
+  'd' => %w[
+    ....#
+    ....#
+    .####
+    #...#
+    #...#
+    #...#
+    .####
+  ],
+  'e' => %w[
+    .....
+    .....
+    .###.
+    #...#
+    #####
+    #....
+    .####
+  ],
+  'f' => %w[
+    ..##.
+    .#...
+    .#...
+    ####.
+    .#...
+    .#...
+    .#...
+  ],
+  'g' => %w[
+    .....
+    .....
+    .####
+    #...#
+    .####
+    ....#
+    .###.
+  ],
+  'h' => %w[
+    #....
+    #....
+    ####.
+    #...#
+    #...#
+    #...#
+    #...#
+  ],
+  'i' => %w[
+    ..#..
+    .....
+    .##..
+    ..#..
+    ..#..
+    ..#..
+    .###.
+  ],
+  'j' => %w[
+    ...#.
+    .....
+    ..##.
+    ...#.
+    ...#.
+    #..#.
+    .##..
+  ],
+  'k' => %w[
+    #....
+    #...#
+    #..#.
+    ###..
+    #..#.
+    #...#
+    #...#
+  ],
+  'l' => %w[
+    .##..
+    ..#..
+    ..#..
+    ..#..
+    ..#..
+    ..#..
+    .###.
+  ],
+  'm' => %w[
+    .....
+    .....
+    ##.#.
+    #.#.#
+    #.#.#
+    #...#
+    #...#
+  ],
+  'n' => %w[
+    .....
+    .....
+    ####.
+    #...#
+    #...#
+    #...#
+    #...#
+  ],
+  'o' => %w[
+    .....
+    .....
+    .###.
+    #...#
+    #...#
+    #...#
+    .###.
+  ],
+  'p' => %w[
+    .....
+    .....
+    ####.
+    #...#
+    ####.
+    #....
+    #....
+  ],
+  'q' => %w[
+    .....
+    .....
+    .####
+    #...#
+    .####
+    ....#
+    ....#
+  ],
+  'r' => %w[
+    .....
+    .....
+    #.##.
+    ##..#
+    #....
+    #....
+    #....
+  ],
+  's' => %w[
+    .....
+    .....
+    .####
+    #....
+    .###.
+    ....#
+    ####.
+  ],
+  't' => %w[
+    ..#..
+    ..#..
+    #####
+    ..#..
+    ..#..
+    ..#..
+    ...#.
+  ],
+  'u' => %w[
+    .....
+    .....
+    #...#
+    #...#
+    #...#
+    #...#
+    .####
+  ],
+  'v' => %w[
+    .....
+    .....
+    #...#
+    #...#
+    #...#
+    .#.#.
+    ..#..
+  ],
+  'w' => %w[
+    .....
+    .....
+    #...#
+    #...#
+    #.#.#
+    #.#.#
+    .#.#.
+  ],
+  'x' => %w[
+    #...#
+    #...#
+    .#.#.
+    ..#..
+    .#.#.
+    #...#
+    #...#
+  ],
+  'y' => %w[
+    .....
+    .....
+    #...#
+    #...#
+    .####
+    ....#
+    .###.
+  ],
+  'z' => %w[
+    .....
+    .....
+    #####
+    ...#.
+    ..#..
+    .#...
+    #####
+  ]
+}.freeze
+
+def bitfont_glyph(char)
+  BITFONT_5X7[char] || BITFONT_5X7[' ']
+end
+
+def draw_text_chunky!(img, text, x:, y:, scale: 1, color: ChunkyPNG::Color::WHITE)
+  return if text.nil? || text.empty?
+  text = text.to_s.downcase
+  cursor_x = x
+
+  text.each_char do |ch|
+    glyph = bitfont_glyph(ch)
+    7.times do |gy|
+      row = glyph[gy]
+      5.times do |gx|
+        next unless row.getbyte(gx) == '#'.ord
+        px = cursor_x + (gx * scale)
+        py = y + (gy * scale)
+        scale.times do |sy|
+          scale.times do |sx|
+            ix = px + sx
+            iy = py + sy
+            next if ix.negative? || iy.negative? || ix >= img.width || iy >= img.height
+            img[ix, iy] = color
+          end
+        end
       end
-      r5 = ((r * 31) + 127) / 255
-      g6 = ((g * 63) + 127) / 255
-      b5 = ((b * 31) + 127) / 255
-      payload << [ (r5 << 11) | (g6 << 5) | b5 ].pack('S<')
+    end
+    cursor_x += (6 * scale) # 5px glyph + 1px spacing
+  end
+end
+
+def overlay_text_metrics(text, scale: 2)
+  lines = overlay_lines(text)
+  return [0, 0, 7 * scale, scale] if lines.empty?
+
+  max_chars = lines.map(&:length).max || 0
+  line_height = 7 * scale
+  gap = scale
+  width = max_chars * 6 * scale
+  height = (lines.length * line_height) + ((lines.length - 1) * gap)
+  [width, height, line_height, gap]
+end
+
+def prepare_payload(path, width, height, blur: nil, sharpen: nil, dither: false, color_correct: true)
+  # Prefer MiniMagick when available (supports overlay text, blur/sharpen, dithering).
+  unless defined?(MiniMagick) && MiniMagick.nil?
+    begin
+      image = MiniMagick::Image.open(path)
+
+      image.resize "#{width}x#{height}!"
+      image.colorspace 'RGB'
+      image.blur "0x#{blur}" if blur
+      image.sharpen "0x#{sharpen}" if sharpen
+      yield image if block_given?
+
+      if dither
+        image.dither 'FloydSteinberg'
+        image.colors 65536
+      end
+
+      pixels = image.get_pixels
+      if pixels.length != height || pixels.any? { |row| row.length != width }
+        raise "Image resize failed: got #{pixels.length}x#{pixels.first&.length}"
+      end
+
+      payload = String.new(capacity: width * height * 2, encoding: Encoding::BINARY)
+      pixels.each do |row|
+        row.each do |pixel|
+          r, g, b = pixel[0, 3] || [0, 0, 0]
+          if color_correct
+            r = apply_color_correction(r, CHANNEL_GAIN[:r])
+            g = apply_color_correction(g, CHANNEL_GAIN[:g])
+            b = apply_color_correction(b, CHANNEL_GAIN[:b])
+          end
+          r5 = ((r * 31) + 127) / 255
+          g6 = ((g * 63) + 127) / 255
+          b5 = ((b * 31) + 127) / 255
+          payload << [(r5 << 11) | (g6 << 5) | b5].pack('S<')
+        end
+      end
+
+      return payload
+    rescue MiniMagick::Error => e
+      warn "Failed to process #{path}: #{e.message}"
+      return nil
     end
   end
 
-  payload
-rescue MiniMagick::Error => e
-  warn "Failed to process #{path}: #{e.message}"
+  # Fallback path for older macOS / Homebrew issues: use built-in `sips`.
+  unless ChunkyPNG
+    warn 'ChunkyPNG gem is required when mini_magick is unavailable. Install it with `gem install chunky_png`.'
+    return nil
+  end
+
+  if blur || sharpen || dither
+    warn 'Note: blur/sharpen/dither options require mini_magick; continuing without them using sips.'
+  end
+
+  # Resize/convert to PNG via sips into a tempfile, then read pixels with ChunkyPNG.
+  Tempfile.create(['lrgpanel', '.png']) do |tmp|
+    out_path = tmp.path
+
+    # sips: -z HEIGHT WIDTH
+    cmd = ['sips', '-s', 'format', 'png', '-z', height.to_s, width.to_s, path, '--out', out_path]
+    stdout, stderr, status = Open3.capture3(*cmd)
+    unless status.success?
+      warn "Failed to process #{path} via sips: #{stderr.strip.empty? ? stdout.strip : stderr.strip}"
+      return nil
+    end
+
+    img = ChunkyPNG::Image.from_file(out_path)
+
+    # Apply overlay text (sips fallback) by drawing directly onto the PNG.
+    if block_given?
+      begin
+        # Use the same block API as the MiniMagick path, but if the caller passes a string
+        # we can draw it here. The current caller uses `draw_overlay(img, text)` which no-ops
+        # when MiniMagick is nil, so we also look for `@__overlay_text` as a lightweight bridge.
+      rescue StandardError
+        nil
+      end
+    end
+
+    lines = overlay_lines(defined?(@__overlay_text) ? @__overlay_text : nil)
+    if lines.any?
+      txt_w, txt_h, line_height, gap = overlay_text_metrics(lines, scale: 1)
+      margin = 3
+      x = [img.width - txt_w - margin, 0].max
+      y = [img.height - txt_h - margin, 0].max
+      step = line_height + gap
+      lines.each_with_index do |line, idx|
+        line_y = y + (idx * step)
+        draw_text_chunky!(img, line, x: x, y: line_y, scale: 1)
+      end
+    end
+
+    if img.width != width || img.height != height
+      warn "Image resize failed via sips: got #{img.width}x#{img.height}"
+      return nil
+    end
+
+    payload = String.new(capacity: width * height * 2, encoding: Encoding::BINARY)
+
+    height.times do |y|
+      width.times do |x|
+        px = img[x, y]
+        r = ChunkyPNG::Color.r(px)
+        g = ChunkyPNG::Color.g(px)
+        b = ChunkyPNG::Color.b(px)
+
+        if color_correct
+          r = apply_color_correction(r, CHANNEL_GAIN[:r])
+          g = apply_color_correction(g, CHANNEL_GAIN[:g])
+          b = apply_color_correction(b, CHANNEL_GAIN[:b])
+        end
+
+        r5 = ((r * 31) + 127) / 255
+        g6 = ((g * 63) + 127) / 255
+        b5 = ((b * 31) + 127) / 255
+        payload << [(r5 << 11) | (g6 << 5) | b5].pack('S<')
+      end
+    end
+
+    payload
+  end
+rescue StandardError => e
+  warn "Failed to process #{path}: #{e.class}: #{e.message}"
   nil
 end
 
@@ -947,7 +1580,23 @@ loop do
 
   image_paths.each do |image_path|
     begin
-      overlay_text = options[:countdown] ? countdown_message : nil
+      overlay_text = nil
+      if options[:countdown]
+        lines = []
+        weather = fetch_melbourne_weather
+        lines << (weather || 'weather n/a')
+        lines << countdown_message
+        overlay_text = lines.join("\n") unless lines.empty?
+      end
+
+      # Bridge overlay text into the sips fallback path.
+      @__overlay_text = overlay_text
+
+      if overlay_text && defined?(MiniMagick) && MiniMagick.nil? && !defined?(@warned_no_overlay)
+        warn 'mini_magick is not available; countdown overlay text will be rendered with chunky_png (sips fallback).'
+        @warned_no_overlay = true
+      end
+
       payload = prepare_payload(
         image_path,
         DISPLAY_WIDTH,

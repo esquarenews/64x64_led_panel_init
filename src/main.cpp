@@ -9,8 +9,10 @@
 #include <esp32-hal-psram.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
-#include <ctime>
 #include <string>
+#if ENABLE_BLE
+#include <esp_bt.h>
+#endif
 
 #define ENABLE_BLE 0
 
@@ -49,6 +51,7 @@ NimBLECharacteristic* bleTxCharacteristic = nullptr;
 NimBLEAdvertising* bleAdvertising = nullptr;
 bool bleReadyPending = false;
 bool bleSubscribed = false;
+bool bleInitOk = false;
 #endif
 
 uint16_t* frameCurrent = nullptr;
@@ -68,7 +71,6 @@ constexpr uint32_t kTransitionDurationMs = 2000;
 constexpr uint32_t kStaticHoldDurationMs = 600;
 constexpr bool kAllowTransitions = true;
 constexpr bool kUseStaticIntermediate = true;
-constexpr bool kEnableOnboardOverlay = false;
 
 enum class TransitionPhase {
   None,
@@ -200,100 +202,6 @@ inline uint16_t remapPanelColor(uint16_t color) {
   return rgbTo565(rgb.b, rgb.r, rgb.g);
 }
 
-bool formatChristmasMessage(char* out, size_t outSize) {
-  if (!out || outSize == 0) {
-    return false;
-  }
-  auto currentTime = []() -> time_t {
-    time_t now = time(nullptr);
-    if (now > 0) {
-      tm nowTm{};
-      if (localtime_r(&now, &nowTm) && nowTm.tm_year + 1900 >= 2020) {
-        return now;
-      }
-    }
-    // Fallback to build time if RTC/NTP is not set (common on fresh boot).
-    tm buildTm{};
-    static const char* months = "JanFebMarAprMayJunJulAugSepOctNovDec";
-    char monthStr[4]{};
-    int day = 1, year = 2020, hour = 0, min = 0, sec = 0;
-    if (std::sscanf(__DATE__, "%3s %d %d", monthStr, &day, &year) == 3 &&
-        std::sscanf(__TIME__, "%d:%d:%d", &hour, &min, &sec) == 3) {
-      const char* pos = std::strstr(months, monthStr);
-      int month = pos ? static_cast<int>((pos - months) / 3) : 0;
-      buildTm.tm_year = year - 1900;
-      buildTm.tm_mon = month;
-      buildTm.tm_mday = day;
-      buildTm.tm_hour = hour;
-      buildTm.tm_min = min;
-      buildTm.tm_sec = sec;
-      return mktime(&buildTm);
-    }
-    return now;  // whatever we had, even if invalid
-  };
-
-  time_t now = currentTime();
-  tm nowTm{};
-  if (now <= 0 || !localtime_r(&now, &nowTm)) {
-    return false;
-  }
-
-  // If it's Christmas Day locally, show the greeting.
-  if (nowTm.tm_mon == 11 && nowTm.tm_mday == 25) {  // tm_mon is 0-based
-    snprintf(out, outSize, "Merry Christmas");
-    return true;
-  }
-
-  // Target is Dec 25 of the current year; roll to next year if already passed.
-  tm targetTm{};
-  targetTm.tm_year = nowTm.tm_year;
-  targetTm.tm_mon = 11;   // December
-  targetTm.tm_mday = 25;  // 25th
-  targetTm.tm_hour = 0;
-  targetTm.tm_min = 0;
-  targetTm.tm_sec = 0;
-  time_t target = mktime(&targetTm);
-  if (target <= now) {
-    targetTm.tm_year += 1;
-    target = mktime(&targetTm);
-  }
-
-  const double secondsDiff = difftime(target, now);
-  // Inclusive countdown: add almost a full day so we don't drop early.
-  const double adjusted = std::max(0.0, secondsDiff + 86399.0);
-  const unsigned days =
-      static_cast<unsigned>(std::floor(adjusted / 86400.0));
-  snprintf(out, outSize, "%u days until Christmas", days);
-  return true;
-}
-
-void drawCountdownOverlay() {
-  if (!kEnableOnboardOverlay) {
-    return;
-  }
-  if (!virtualMatrix || !firstFrameDisplayed) {
-    return;
-  }
-  char msg[48];
-  if (!formatChristmasMessage(msg, sizeof(msg))) {
-    return;
-  }
-  const size_t len = std::strlen(msg);
-  const uint8_t charWidth = 6;   // default font width incl. spacing
-  const uint8_t charHeight = 8;  // default font height
-  int16_t x = static_cast<int16_t>(kDisplayWidth) -
-              static_cast<int16_t>(len * charWidth) - 1;
-  if (x < 0) {
-    x = 0;
-  }
-  int16_t y = static_cast<int16_t>(kDisplayHeight) - charHeight;
-  virtualMatrix->setTextWrap(false);
-  virtualMatrix->setTextSize(1);
-  virtualMatrix->setTextColor(remapPanelColor(rgbTo565(255, 255, 255)));
-  virtualMatrix->setCursor(x, y);
-  virtualMatrix->print(msg);
-}
-
 void generateBootTestPattern(uint16_t* buffer) {
   if (!buffer) {
     return;
@@ -422,27 +330,67 @@ BleRxCallbacks bleRxCallbacks;
 BleTxCallbacks bleTxCallbacks;
 BleServerCallbacks bleServerCallbacks;
 
-void initBle() {
+bool initBle() {
+  esp_err_t rel = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+  if (rel == ESP_OK) {
+    emitMessage("BLE step: BT classic mem released");
+  } else if (rel == ESP_ERR_INVALID_STATE) {
+    emitMessage("BLE step: BT classic already released");
+  } else {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "BLE step: mem release err %d", static_cast<int>(rel));
+    emitMessage(buf);
+  }
+
+  NimBLEDevice::deinit(true);
+  emitMessage("BLE step: NimBLEDevice::deinit");
+
+  emitMessage("BLE step: NimBLEDevice::init");
   NimBLEDevice::init(kBleDeviceName);
+
   // Keep BLE init minimal to avoid stalls on some boards.
-  NimBLEDevice::setPower(ESP_PWR_LVL_P6);
+  NimBLEDevice::setPower(ESP_PWR_LVL_P3);
+  emitMessage("BLE step: power set");
 
   bleServer = NimBLEDevice::createServer();
+  if (!bleServer) {
+    emitMessage("BLE step: createServer failed");
+    return false;
+  }
   bleServer->setCallbacks(&bleServerCallbacks);
+  emitMessage("BLE step: server created");
 
   NimBLEService* service = bleServer->createService(kBleServiceUuid);
+  if (!service) {
+    emitMessage("BLE step: createService failed");
+    return false;
+  }
+  emitMessage("BLE step: service created");
 
   bleTxCharacteristic =
       service->createCharacteristic(kBleTxCharUuid, NIMBLE_PROPERTY::NOTIFY);
+  if (!bleTxCharacteristic) {
+    emitMessage("BLE step: tx characteristic failed");
+    return false;
+  }
   bleTxCharacteristic->setCallbacks(&bleTxCallbacks);
 
   NimBLECharacteristic* rxCharacteristic = service->createCharacteristic(
       kBleRxCharUuid, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  if (!rxCharacteristic) {
+    emitMessage("BLE step: rx characteristic failed");
+    return false;
+  }
   rxCharacteristic->setCallbacks(&bleRxCallbacks);
 
   service->start();
+  emitMessage("BLE step: service started");
 
   bleAdvertising = NimBLEDevice::getAdvertising();
+  if (!bleAdvertising) {
+    emitMessage("BLE step: getAdvertising failed");
+    return false;
+  }
   bleAdvertising->addServiceUUID(kBleServiceUuid);
   bleAdvertising->setConnectableMode(BLE_GAP_CONN_MODE_UND);
   bleAdvertising->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
@@ -452,6 +400,7 @@ void initBle() {
   bleAdvertising->start();
 
   emitMessage("BLE ADVERTISING");
+  return true;
 }
 #endif
 
@@ -587,13 +536,6 @@ void renderFrame(const uint16_t* frame) {
   }
 }
 
-void renderFrameWithOverlay(const uint16_t* frame, bool addOverlay) {
-  renderFrame(frame);
-  if (addOverlay) {
-    drawCountdownOverlay();
-  }
-}
-
 void renderTransition() {
   if (!virtualMatrix || !transitionSource || !transitionTarget) {
     transitionActive = false;
@@ -646,7 +588,7 @@ void renderTransition() {
         if (frameCurrent != frameNext) {
           std::memcpy(frameCurrent, frameNext, kFrameByteSize);
         }
-        renderFrameWithOverlay(frameCurrent, true);
+        renderFrame(frameCurrent);
         transitionActive = false;
         transitionPhase = TransitionPhase::None;
         transitionSource = nullptr;
@@ -700,7 +642,7 @@ void updateDisplay() {
   if (!firstFrameDisplayed) {
     std::memcpy(frameCurrent, frameNext, kFrameByteSize);
     firstFrameDisplayed = true;
-    renderFrameWithOverlay(frameCurrent, true);
+    renderFrame(frameCurrent);
     emitMessage("SHOW");
   } else if (transitionsEnabled) {
     if (kUseStaticIntermediate && frameStatic) {
@@ -720,7 +662,7 @@ void updateDisplay() {
     if (frameCurrent != frameNext) {
       std::memcpy(frameCurrent, frameNext, kFrameByteSize);
     }
-    renderFrameWithOverlay(frameCurrent, true);
+    renderFrame(frameCurrent);
     emitMessage("DONE");
   }
 }
@@ -812,8 +754,14 @@ void setup() {
 
 #if ENABLE_BLE
   emitMessage("BLE init starting...");
-  initBle();
-  emitMessage("BLE init complete.");
+  bleInitOk = initBle();
+  if (bleInitOk) {
+    emitMessage("BLE init complete.");
+  } else {
+    emitMessage("BLE init failed; continuing without BLE.");
+  }
+#else
+  emitMessage("BLE disabled (ENABLE_BLE=0 at compile time).");
 #endif
 
   emitMessage("Allocating frame buffers...");
@@ -884,6 +832,8 @@ void loop() {
     }
   }
 #if ENABLE_BLE
-  serviceBleReady();
+  if (bleInitOk) {
+    serviceBleReady();
+  }
 #endif
 }

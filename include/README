@@ -45,3 +45,7 @@ To stream your images from a different folder:
 ruby src/image_player.rb --port /dev/cu.usbmodem101 --baud 115200 --dir IMG2
 
 If the port number changes after replugging, adjust --port accordingly.
+
+##Sample command
+
+```ruby src/image_player.rb --port /dev/cu.usbmodem1101 --baud 115200 --dir IMG2
