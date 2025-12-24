@@ -689,7 +689,13 @@ def overlay_lines(text)
   lines.map { |line| line.to_s.strip }.reject(&:empty?)
 end
 
-MELBOURNE_WEATHER_URL = 'https://api.open-meteo.com/v1/forecast?latitude=-37.81&longitude=144.96&current=temperature_2m&daily=temperature_2m_max&forecast_days=1&timezone=Australia/Melbourne'
+def right_align_lines(lines)
+  return [] if lines.nil? || lines.empty?
+  max_len = lines.map(&:length).max || 0
+  lines.map { |line| (' ' * (max_len - line.length)) + line }
+end
+
+MELBOURNE_WEATHER_URL = 'https://api.open-meteo.com/v1/forecast?latitude=-37.78589&longitude=144.89414&current=temperature_2m&daily=temperature_2m_max&forecast_days=1&timezone=Australia/Melbourne'
 WEATHER_CACHE_TTL = 600 # seconds
 
 def parse_weather_payload(body)
@@ -698,7 +704,7 @@ def parse_weather_payload(body)
   max = payload.dig('daily', 'temperature_2m_max', 0)
   return nil unless current && max
 
-  "#{current.to_f.round(1)}C/#{max.to_f.round}C"
+  "#{current.to_f.round(1)}/#{max.to_f.round}"
 rescue JSON::ParserError
   nil
 end
@@ -715,6 +721,8 @@ def fetch_melbourne_weather
       Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
         http.open_timeout = 5
         http.read_timeout = 5
+        # Some macOS setups lack a working cert store; allow an opt-in bypass.
+        http.verify_mode = OpenSSL::SSL::VERIFY_NONE if ENV['WEATHER_INSECURE'] == '1'
         http.get(uri.request_uri)
       end
 
@@ -728,11 +736,25 @@ def fetch_melbourne_weather
   end
 
   if body.nil?
-    curl_out, curl_err, status = Open3.capture3('curl', '-s', MELBOURNE_WEATHER_URL)
+    curl_args = ['curl', '-fSs', '--connect-timeout', '5']
+    curl_args << '-k' if ENV['WEATHER_INSECURE'] == '1'
+    curl_args << MELBOURNE_WEATHER_URL
+    curl_out, curl_err, status = Open3.capture3(*curl_args)
     if status.success? && !curl_out.strip.empty?
       body = curl_out
     else
       warn "Weather curl fallback failed: #{curl_err.strip.empty? ? 'no output' : curl_err.strip}"
+    end
+  end
+
+  if body.nil? && uri.scheme == 'https'
+    begin
+      http_uri = uri.dup
+      http_uri.scheme = 'http'
+      response = Net::HTTP.get_response(http_uri)
+      body = response.body if response.is_a?(Net::HTTPSuccess) || response.is_a?(Net::HTTPOK)
+    rescue StandardError => e
+      warn "Weather HTTP (plaintext) fetch failed: #{e.message}"
     end
   end
 
@@ -748,7 +770,7 @@ end
 
 
 def draw_overlay(image, text)
-  lines = overlay_lines(text)
+  lines = right_align_lines(overlay_lines(text))
   return if lines.empty?
   return if defined?(MiniMagick) && MiniMagick.nil?
 
@@ -872,6 +894,24 @@ BITFONT_5X7 = {
     ....#
     ...#.
     .##..
+  ],
+  'C' => %w[
+    .###.
+    #...#
+    #....
+    #....
+    #....
+    #...#
+    .###.
+  ],
+  'M' => %w[
+    #...#
+    ##.##
+    #.#.#
+    #.#.#
+    #...#
+    #...#
+    #...#
   ],
 
   # Punctuation / symbols
@@ -1182,7 +1222,7 @@ end
 
 def draw_text_chunky!(img, text, x:, y:, scale: 1, color: ChunkyPNG::Color::WHITE)
   return if text.nil? || text.empty?
-  text = text.to_s.downcase
+  text = text.to_s
   cursor_x = x
 
   text.each_char do |ch|
@@ -1300,13 +1340,14 @@ def prepare_payload(path, width, height, blur: nil, sharpen: nil, dither: false,
     end
 
     lines = overlay_lines(defined?(@__overlay_text) ? @__overlay_text : nil)
-    if lines.any?
-      txt_w, txt_h, line_height, gap = overlay_text_metrics(lines, scale: 1)
+    aligned_lines = right_align_lines(lines)
+    if aligned_lines.any?
+      txt_w, txt_h, line_height, gap = overlay_text_metrics(aligned_lines, scale: 1)
       margin = 3
       x = [img.width - txt_w - margin, 0].max
       y = [img.height - txt_h - margin, 0].max
       step = line_height + gap
-      lines.each_with_index do |line, idx|
+      aligned_lines.each_with_index do |line, idx|
         line_y = y + (idx * step)
         draw_text_chunky!(img, line, x: x, y: line_y, scale: 1)
       end
@@ -1398,7 +1439,8 @@ options = {
   color_correct: true,
   countdown: true,
   test_pattern: false,
-  static_test: false
+  static_test: false,
+  single: false
 }
 
 OptionParser.new do |opts|
@@ -1442,6 +1484,9 @@ OptionParser.new do |opts|
   end
   opts.on('--static-test', 'Stream a looping static noise test pattern') do
     options[:static_test] = true
+  end
+  opts.on('--single', 'Display the first image found once and exit (no looping)') do
+    options[:single] = true
   end
   opts.on('-h', '--help', 'Show this help message') do
     puts opts
@@ -1622,6 +1667,11 @@ loop do
         end
 
       frames_sent += 1
+
+      if options[:single]
+        puts 'Single image mode enabled; holding current image and exiting.'
+        exit 0
+      end
 
       if options[:manual]
         puts "Received #{acknowledgement}. Press Enter to display the next image (Ctrl+C to quit)..."
