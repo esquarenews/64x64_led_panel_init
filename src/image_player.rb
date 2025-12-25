@@ -8,6 +8,7 @@ require 'net/http'
 require 'base64'
 require 'tempfile'
 require 'uri'
+require 'date'
 
 begin
   require 'serialport'
@@ -665,28 +666,18 @@ def build_static_payload(width, height, apply_correction: true)
 end
 
 
-def countdown_message(today = Date.today)
-  target = Date.new(today.year, 12, 25)
-  target = Date.new(today.year + 1, 12, 25) if today > target
-  return 'Merry Christmas' if today == target
-  days = (target - today).to_i
-  unit = (days == 1) ? 'day' : 'days'
-  "#{days} #{unit} until Christmas"
-end
-
-# Compact version for sips fallback overlay
-def countdown_message_short(today = Date.today)
-  target = Date.new(today.year, 12, 25)
-  target = Date.new(today.year + 1, 12, 25) if today > target
-  return 'merry xmas' if today == target
-  days = (target - today).to_i
-  "#{days}d to Xmas"
+def calendar_message(today = Date.today)
+  # Example: "Thursday 19 December 2025"
+  day_name = today.strftime('%A')
+  day = today.day
+  month_year = today.strftime('%B %Y')
+  "#{day_name} #{day} #{month_year}"
 end
 
 def overlay_lines(text)
   return [] if text.nil?
   lines = text.is_a?(Array) ? text : text.to_s.split(/\r?\n/)
-  lines.map { |line| line.to_s.strip }.reject(&:empty?)
+  lines.map { |line| line.to_s.rstrip }.reject(&:empty?)
 end
 
 def right_align_lines(lines)
@@ -1217,7 +1208,10 @@ BITFONT_5X7 = {
 }.freeze
 
 def bitfont_glyph(char)
-  BITFONT_5X7[char] || BITFONT_5X7[' ']
+  return BITFONT_5X7[char] if BITFONT_5X7.key?(char)
+  lower = char.to_s.downcase
+  return BITFONT_5X7[lower] if BITFONT_5X7.key?(lower)
+  BITFONT_5X7[' ']
 end
 
 def draw_text_chunky!(img, text, x:, y:, scale: 1, color: ChunkyPNG::Color::WHITE)
@@ -1437,7 +1431,7 @@ options = {
   dither: false,
   manual: false,
   color_correct: true,
-  countdown: true,
+  calendar: true,
   test_pattern: false,
   static_test: false,
   single: false
@@ -1476,8 +1470,8 @@ OptionParser.new do |opts|
   opts.on('--no-color-correct', 'Disable color correction / gamma adjustments') do
     options[:color_correct] = false
   end
-  opts.on('--no-countdown', 'Do not overlay days-until-Christmas text') do
-    options[:countdown] = false
+  opts.on('--no-calendar', 'Do not overlay date text') do
+    options[:calendar] = false
   end
   opts.on('--test-pattern', 'Send built-in colour calibration pattern') do
     options[:test_pattern] = true
@@ -1626,19 +1620,17 @@ loop do
   image_paths.each do |image_path|
     begin
       overlay_text = nil
-      if options[:countdown]
-        lines = []
-        weather = fetch_melbourne_weather
-        lines << (weather || 'weather n/a')
-        lines << countdown_message
-        overlay_text = lines.join("\n") unless lines.empty?
-      end
+      lines = []
+      weather = fetch_melbourne_weather
+      lines << (weather || 'weather n/a')
+      lines << calendar_message if options[:calendar]
+      overlay_text = lines.join("\n") unless lines.empty?
 
       # Bridge overlay text into the sips fallback path.
       @__overlay_text = overlay_text
 
       if overlay_text && defined?(MiniMagick) && MiniMagick.nil? && !defined?(@warned_no_overlay)
-        warn 'mini_magick is not available; countdown overlay text will be rendered with chunky_png (sips fallback).'
+        warn 'mini_magick is not available; overlay text will be rendered with chunky_png (sips fallback).'
         @warned_no_overlay = true
       end
 
