@@ -670,8 +670,9 @@ def calendar_message(today = Date.today)
   # Example: "Thursday 19 December 2025"
   day_name = today.strftime('%A')
   day = today.day
-  month_year = today.strftime('%B %Y')
-  "#{day_name} #{day} #{month_year}"
+  month = today.strftime('%B')
+  year = today.year
+  "#{day_name}, #{day} #{month}, #{year}"
 end
 
 def overlay_lines(text)
