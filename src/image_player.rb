@@ -21,13 +21,43 @@ begin
   require 'mini_magick'
 
   # mini_magick is a wrapper; it still needs ImageMagick/GraphicsMagick binaries.
-  # If neither `mogrify` nor `magick` is available, force the `sips` fallback path.
-  unless system('command -v mogrify >/dev/null 2>&1') || system('command -v magick >/dev/null 2>&1')
-    warn 'ImageMagick not found (mogrify/magick missing); using sips fallback.'
+  # If no CLI tool is available, force the `sips` fallback path.
+  im_cli_present = %w[mogrify magick convert].any? do |cmd|
+    system("command -v #{cmd} >/dev/null 2>&1")
+  end
+
+  unless im_cli_present
+    warn 'ImageMagick CLI not found (mogrify/magick/convert missing); using sips fallback.'
     MiniMagick = nil
   end
 rescue LoadError
+  warn 'mini_magick gem not available; install with `gem install mini_magick` to use ImageMagick. Falling back to sips.'
   MiniMagick = nil
+end
+
+# Preferred overlay font (path). If you add a font file locally, set LRG_OVERLAY_FONT or OVERLAY_FONT to its path.
+OVERLAY_FONT_CANDIDATES = [
+  ENV['LRG_OVERLAY_FONT'],
+  ENV['OVERLAY_FONT'],
+  File.expand_path('../include/overlay_font.ttf', __dir__),
+  '/usr/share/fonts/liberation/LiberationMono-Regular.ttf',
+  '/usr/share/fonts/Adwaita/AdwaitaMono-Regular.ttf',
+  '/usr/share/fonts/TTF/JetBrainsMonoNerdFontMono-Regular.ttf',
+  '/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf'
+].freeze
+
+def overlay_font_path
+  return @overlay_font_path if defined?(@overlay_font_path)
+  @overlay_font_path = OVERLAY_FONT_CANDIDATES.compact.map do |candidate|
+    path = candidate.start_with?('~') ? File.expand_path(candidate) : candidate
+    path if File.file?(path)
+  end.compact.first
+
+  unless @overlay_font_path
+    warn 'No overlay font found; text overlay may fail if ImageMagick cannot locate a default font.'
+  end
+
+  @overlay_font_path
 end
 
 begin
@@ -768,12 +798,13 @@ def draw_overlay(image, text)
 
   point_size = 12
   line_height = (point_size * 1.25).ceil
+  font = overlay_font_path
   image.combine_options do |c|
     c.gravity 'SouthEast'
     c.fill 'white'
     c.stroke 'none'
     c.strokewidth 0
-    c.font 'Courier'
+    c.font(font || 'Courier')
     c.pointsize point_size
     lines.reverse_each.with_index do |line, idx|
       safe = line.gsub("'", "\\\\'")
@@ -1469,6 +1500,58 @@ def draw_text_chunky!(img, text, x:, y:, scale: 1, color: ChunkyPNG::Color::WHIT
   end
 end
 
+def draw_text_pixels!(pixels, text, x:, y:, scale: 1, color: [255, 255, 255])
+  return if text.nil? || text.empty?
+  return if pixels.nil? || pixels.empty?
+  width = pixels.first.length
+  height = pixels.length
+  text.to_s.each_char do |ch|
+    glyph = bitfont_glyph(ch)
+    7.times do |gy|
+      row = glyph[gy]
+      5.times do |gx|
+        next unless row.getbyte(gx) == '#'.ord
+        px = x + (gx * scale)
+        py = y + (gy * scale)
+        scale.times do |sy|
+          scale.times do |sx|
+            ix = px + sx
+            iy = py + sy
+            next if ix.negative? || iy.negative? || ix >= width || iy >= height
+            pixel = pixels[iy][ix]
+            # Ensure we can write RGB; tolerate 3 or 4 channel arrays.
+            pixel[0] = color[0]
+            pixel[1] = color[1]
+            pixel[2] = color[2]
+          end
+        end
+      end
+    end
+    x += (6 * scale) # 5px glyph + 1px spacing
+  end
+end
+
+def overlay_text_pixels!(pixels, overlay_text, scale: 1)
+  return if overlay_text.nil? || overlay_text.empty?
+  return if pixels.nil? || pixels.empty?
+
+  lines = overlay_lines(overlay_text)
+  aligned_lines = right_align_lines(lines)
+  return if aligned_lines.empty?
+
+  width = pixels.first.length
+  height = pixels.length
+  txt_w, txt_h, line_height, gap = overlay_text_metrics(aligned_lines, scale: scale)
+  margin = 3
+  x = [width - txt_w - margin, 0].max
+  y = [height - txt_h - margin, 0].max
+  step = line_height + gap
+  aligned_lines.each_with_index do |line, idx|
+    line_y = y + (idx * step)
+    draw_text_pixels!(pixels, line, x: x, y: line_y, scale: scale, color: [255, 255, 255])
+  end
+end
+
 def overlay_text_metrics(text, scale: 2)
   lines = overlay_lines(text)
   return [0, 0, 7 * scale, scale] if lines.empty?
@@ -1481,7 +1564,7 @@ def overlay_text_metrics(text, scale: 2)
   [width, height, line_height, gap]
 end
 
-def prepare_payload(path, width, height, blur: nil, sharpen: nil, dither: false, color_correct: true)
+def prepare_payload(path, width, height, blur: nil, sharpen: nil, dither: false, color_correct: true, overlay_text: nil)
   # Prefer MiniMagick when available (supports overlay text, blur/sharpen, dithering).
   unless defined?(MiniMagick) && MiniMagick.nil?
     begin
@@ -1499,6 +1582,7 @@ def prepare_payload(path, width, height, blur: nil, sharpen: nil, dither: false,
       end
 
       pixels = image.get_pixels
+      overlay_text_pixels!(pixels, overlay_text) if overlay_text
       if pixels.length != height || pixels.any? { |row| row.length != width }
         raise "Image resize failed: got #{pixels.length}x#{pixels.first&.length}"
       end
@@ -1561,7 +1645,7 @@ def prepare_payload(path, width, height, blur: nil, sharpen: nil, dither: false,
       end
     end
 
-    lines = overlay_lines(defined?(@__overlay_text) ? @__overlay_text : nil)
+    lines = overlay_lines(overlay_text)
     aligned_lines = right_align_lines(lines)
     if aligned_lines.any?
       txt_w, txt_h, line_height, gap = overlay_text_metrics(aligned_lines, scale: 1)
@@ -1854,9 +1938,6 @@ loop do
       lines << calendar_message if options[:calendar]
       overlay_text = lines.join("\n") unless lines.empty?
 
-      # Bridge overlay text into the sips fallback path.
-      @__overlay_text = overlay_text
-
       if overlay_text && defined?(MiniMagick) && MiniMagick.nil? && !defined?(@warned_no_overlay)
         warn 'mini_magick is not available; overlay text will be rendered with chunky_png (sips fallback).'
         @warned_no_overlay = true
@@ -1869,10 +1950,9 @@ loop do
         blur: options[:blur],
         sharpen: options[:sharpen],
         dither: options[:dither],
-        color_correct: options[:color_correct]
-      ) do |img|
-        draw_overlay(img, overlay_text) if overlay_text
-      end
+        color_correct: options[:color_correct],
+        overlay_text: overlay_text
+      )
       next unless payload
 
       puts "Sending #{File.basename(image_path)}..."
