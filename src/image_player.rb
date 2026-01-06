@@ -632,9 +632,13 @@ def clamp255(value)
   [[value.round, 0].max, 255].min
 end
 
+def runtime_gamma
+  (defined?(@runtime_gamma) && @runtime_gamma) || COLOR_GAMMA
+end
+
 def apply_color_correction(value, gain)
   normalized = value.to_f / 255.0
-  corrected = normalized**COLOR_GAMMA
+  corrected = normalized**runtime_gamma
   corrected *= gain
   clamp255(corrected * 255.0)
 end
@@ -1744,6 +1748,7 @@ options = {
   manual: false,
   color_correct: true,
   calendar: true,
+  gamma: COLOR_GAMMA,
   test_pattern: false,
   static_test: false,
   single: false
@@ -1773,6 +1778,9 @@ OptionParser.new do |opts|
   opts.on('--sharpen SIGMA', Float, 'Apply sharpen after scaling (sigma value)') do |value|
     options[:sharpen] = value if value.positive?
   end
+  opts.on('--gamma VALUE', Float, "Override gamma (default: #{COLOR_GAMMA})") do |value|
+    options[:gamma] = value if value&.positive?
+  end
   opts.on('--dither', 'Enable Floyd-Steinberg dithering before RGB565 quantization') do
     options[:dither] = true
   end
@@ -1801,6 +1809,7 @@ OptionParser.new do |opts|
 end.parse!
 
 FileUtils.mkdir_p(options[:image_dir])
+@runtime_gamma = options[:gamma]
 
 # transport handle is initialised after helper definitions
 transport = nil
