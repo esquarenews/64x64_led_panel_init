@@ -1748,6 +1748,7 @@ options = {
   manual: false,
   color_correct: true,
   calendar: true,
+  overlay: true,
   gamma: COLOR_GAMMA,
   test_pattern: false,
   static_test: false,
@@ -1792,6 +1793,9 @@ OptionParser.new do |opts|
   end
   opts.on('--no-calendar', 'Do not overlay date text') do
     options[:calendar] = false
+  end
+  opts.on('--no-overlay', 'Disable all overlay text (weather/date)') do
+    options[:overlay] = false
   end
   opts.on('--test-pattern', 'Send built-in colour calibration pattern') do
     options[:test_pattern] = true
@@ -1941,11 +1945,13 @@ loop do
   image_paths.each do |image_path|
     begin
       overlay_text = nil
-      lines = []
-      weather = fetch_melbourne_weather
-      lines << (weather || 'weather n/a')
-      lines << calendar_message if options[:calendar]
-      overlay_text = lines.join("\n") unless lines.empty?
+      if options[:overlay]
+        lines = []
+        weather = fetch_melbourne_weather
+        lines << (weather || 'weather n/a')
+        lines << calendar_message if options[:calendar]
+        overlay_text = lines.join("\n") unless lines.empty?
+      end
 
       if overlay_text && defined?(MiniMagick) && MiniMagick.nil? && !defined?(@warned_no_overlay)
         warn 'mini_magick is not available; overlay text will be rendered with chunky_png (sips fallback).'
