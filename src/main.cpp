@@ -365,7 +365,7 @@ bool initBle() {
     emitMessage("BLE step: createService failed");
     return false;
   }
-  emitMessage("BLE step: service created");
+  emiessage("BLE step: service created");
 
   bleTxCharacteristic =
       service->createCharacteristic(kBleTxCharUuid, NIMBLE_PROPERTY::NOTIFY);
@@ -720,8 +720,8 @@ void setup() {
   mxconfig.clkphase = false;
   mxconfig.driver = HUB75_I2S_CFG::ICN2038S;
   mxconfig.setPixelColorDepthBits(6);
-  mxconfig.latch_blanking = 1;
-  mxconfig.min_refresh_rate = 180;
+  mxconfig.latch_blanking = 2;
+  mxconfig.min_refresh_rate = 200;
 
   matrix = new MatrixPanel_I2S_DMA(mxconfig);
   if (!matrix || !matrix->begin(mxconfig)) {
