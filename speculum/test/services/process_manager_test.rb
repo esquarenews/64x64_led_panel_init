@@ -12,6 +12,32 @@ class ProcessManagerTest < ActiveSupport::TestCase
     end
   end
 
+  test "zombie pid is not treated as running" do
+    Dir.mktmpdir do |runtime_dir|
+      runtime_root = Pathname.new(runtime_dir)
+      pidfile = runtime_root.join("speculum.pid")
+      child_pid = Process.spawn(RbConfig.ruby, "-e", "exit!")
+      pidfile.write(child_pid.to_s)
+
+      20.times do
+        break if `ps -o stat= -p #{child_pid} 2>/dev/null`.strip.start_with?("Z")
+
+        sleep 0.05
+      end
+
+      stub_singleton_method(Speculum::Paths, :pidfile, pidfile) do
+        assert_not Speculum::ProcessManager.new.running?
+        assert_not pidfile.exist?
+      end
+    ensure
+      begin
+        Process.waitpid(child_pid) if child_pid
+      rescue Errno::ECHILD, Errno::ESRCH
+        nil
+      end
+    end
+  end
+
   test "running player without display state becomes unhealthy after startup window" do
     Dir.mktmpdir do |runtime_dir|
       runtime_root = Pathname.new(runtime_dir)

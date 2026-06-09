@@ -3,11 +3,18 @@ require "json"
 module Speculum
   class ProcessManager
     def running?
-      return false unless pid
+      current_pid = pid
+      return false unless current_pid
 
-      Process.kill(0, pid)
+      Process.kill(0, current_pid)
+      if zombie?(current_pid)
+        reap(current_pid)
+        Paths.pidfile.delete if Paths.pidfile.exist?
+        return false
+      end
       true
     rescue Errno::ESRCH, Errno::EPERM
+      Paths.pidfile.delete if Paths.pidfile.exist?
       false
     end
 
@@ -45,14 +52,15 @@ module Speculum
     end
 
     def pause
-      return unless running?
+      current_pid = pid
+      return unless current_pid && running?
 
-      Process.kill("TERM", -pid)
-      wait_for_exit
+      signal_process_group("TERM", current_pid)
+      wait_for_exit(current_pid)
     rescue Errno::ESRCH
       nil
     ensure
-      Paths.pidfile.delete if Paths.pidfile.exist? && !running?
+      Paths.pidfile.delete if Paths.pidfile.exist? && !process_alive?(current_pid)
     end
 
     def restart(settings)
@@ -151,12 +159,51 @@ module Speculum
       nil
     end
 
-    def wait_for_exit
+    def wait_for_exit(target_pid)
       20.times do
-        break unless running?
+        reap(target_pid)
+        break unless process_alive?(target_pid)
+
         sleep 0.1
       end
-      Process.kill("KILL", -pid) if running?
+
+      return unless process_alive?(target_pid)
+
+      signal_process_group("KILL", target_pid)
+      20.times do
+        reap(target_pid)
+        break unless process_alive?(target_pid)
+
+        sleep 0.1
+      end
+    end
+
+    def process_alive?(target_pid)
+      return false unless target_pid
+
+      Process.kill(0, target_pid)
+      !zombie?(target_pid)
+    rescue Errno::ESRCH, Errno::EPERM
+      false
+    end
+
+    def reap(target_pid)
+      Process.waitpid(target_pid, Process::WNOHANG)
+    rescue Errno::ECHILD, Errno::ESRCH
+      nil
+    end
+
+    def zombie?(target_pid)
+      status = `ps -o stat= -p #{Integer(target_pid)} 2>/dev/null`.strip
+      status.start_with?("Z")
+    rescue ArgumentError
+      true
+    end
+
+    def signal_process_group(signal, target_pid)
+      Process.kill(signal, -target_pid)
+    rescue Errno::ESRCH
+      Process.kill(signal, target_pid)
     end
 
     def current_image_name
