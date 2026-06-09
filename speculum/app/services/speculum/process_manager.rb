@@ -26,6 +26,7 @@ module Speculum
 
       FileUtils.mkdir_p(Paths.runtime_root)
       FileUtils.rm_f(Paths.state_file)
+      FileUtils.rm_f(Paths.queue_file)
       command = PlayerCommand.new(settings).argv
       log = File.open(Paths.logfile, "a")
       log.sync = true
@@ -45,6 +46,11 @@ module Speculum
       nil
     ensure
       Paths.pidfile.delete if Paths.pidfile.exist? && !running?
+    end
+
+    def restart(settings)
+      pause if running?
+      start(settings)
     end
 
     def recent_log(lines: 12)

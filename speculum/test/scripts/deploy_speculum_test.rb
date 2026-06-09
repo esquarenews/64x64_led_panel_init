@@ -32,6 +32,8 @@ class DeploySpeculumTest < ActiveSupport::TestCase
     assert_includes script, "update_runtime_env"
     assert_includes script, "RESET_CREDENTIALS"
     assert_includes script, "SPECULUM_PASSWORD"
+    assert_includes script, "git status --porcelain --untracked-files=no"
+    assert_includes script, "tracked local changes"
   end
 
   test "deployment bundle install path is ignored" do

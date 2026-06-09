@@ -16,10 +16,21 @@ class DashboardController < ApplicationController
 
   def update
     settings = Speculum::Settings.load
-    settings.merge!(settings_params)
+    permitted = settings_params
+    folder_changed = permitted.key?("selected_folder") && permitted["selected_folder"] != settings["selected_folder"]
+    settings.merge!(permitted)
     settings["folder_order"] = Speculum::ImageLibrary.new(settings).ordered_folder_names
     Speculum::Settings.save(settings)
-    redirect_to root_path, notice: "Settings saved"
+
+    player = Speculum::ProcessManager.new
+    if folder_changed && player.running?
+      player.restart(settings.merge("hard_reset_before_start" => "1"))
+      redirect_to root_path, notice: "Settings saved and panel reset for folder change"
+    else
+      redirect_to root_path, notice: "Settings saved"
+    end
+  rescue StandardError => e
+    redirect_to root_path, alert: e.message
   end
 
   def start

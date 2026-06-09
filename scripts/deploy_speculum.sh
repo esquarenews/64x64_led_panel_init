@@ -191,9 +191,9 @@ require_command curl
 log "Deploying Speculum from $REPO_DIR"
 cd "$REPO_DIR"
 
-if [[ "$ALLOW_DIRTY" != "1" ]] && [[ -n "$(git status --porcelain)" ]]; then
+if [[ "$ALLOW_DIRTY" != "1" ]] && [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   git status --short
-  printf '\nRefusing to deploy with local changes. Commit/stash them, or run ALLOW_DIRTY=1 %s.\n' "$0" >&2
+  printf '\nRefusing to deploy with tracked local changes. Commit/stash them, or run ALLOW_DIRTY=1 %s.\n' "$0" >&2
   exit 1
 fi
 
