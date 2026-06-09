@@ -19,5 +19,7 @@ class DeploySpeculumTest < ActiveSupport::TestCase
     assert_includes script, "systemctl restart"
     assert_includes script, "bundle exec rails server"
     assert_includes script, "EnvironmentFile=$ENV_FILE"
+    assert_includes script, "RESET_CREDENTIALS"
+    assert_includes script, "SPECULUM_PASSWORD"
   end
 end

@@ -14,6 +14,9 @@ PORT="${PORT:-3000}"
 INSTALL_SERVICE="${INSTALL_SERVICE:-1}"
 RUN_TESTS="${RUN_TESTS:-0}"
 ALLOW_DIRTY="${ALLOW_DIRTY:-0}"
+RESET_CREDENTIALS="${RESET_CREDENTIALS:-0}"
+SPECULUM_USERNAME="${SPECULUM_USERNAME:-admin}"
+SPECULUM_PASSWORD="${SPECULUM_PASSWORD:-}"
 
 if [[ "$(id -u)" -eq 0 ]]; then
   SUDO=()
@@ -46,7 +49,7 @@ ensure_env_file() {
   if [[ ! -f "$ENV_FILE" ]]; then
     local secret password
     secret="$(cd "$APP_DIR" && SECRET_KEY_BASE_DUMMY=1 bundle exec rails secret)"
-    password="$(openssl rand -base64 24 | tr -d '\n')"
+    password="${SPECULUM_PASSWORD:-$(openssl rand -base64 24 | tr -d '\n')}"
 
     local tmp
     tmp="$(mktemp)"
@@ -54,7 +57,7 @@ ensure_env_file() {
 RAILS_ENV=$RAILS_ENV
 RAILS_LOG_LEVEL=info
 SECRET_KEY_BASE=$(quote_for_env "$secret")
-SPECULUM_USERNAME=admin
+SPECULUM_USERNAME=$(quote_for_env "$SPECULUM_USERNAME")
 SPECULUM_PASSWORD=$(quote_for_env "$password")
 SPECULUM_RUBY=$(quote_for_env "$(command -v ruby)")
 BIND=$BIND
@@ -64,10 +67,30 @@ ENV
     "${SUDO[@]}" install -m 600 "$tmp" "$ENV_FILE"
     rm -f "$tmp"
     printf 'Created %s\n' "$ENV_FILE"
-    printf 'Initial Speculum login: admin / %s\n' "$password"
+    printf 'Initial Speculum login: %s / %s\n' "$SPECULUM_USERNAME" "$password"
   else
     printf 'Using existing %s\n' "$ENV_FILE"
+    if [[ "$RESET_CREDENTIALS" == "1" ]]; then
+      reset_credentials
+    fi
   fi
+}
+
+reset_credentials() {
+  if [[ -z "$SPECULUM_PASSWORD" ]]; then
+    printf 'RESET_CREDENTIALS=1 requires SPECULUM_PASSWORD to be set.\n' >&2
+    exit 1
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  "${SUDO[@]}" grep -v -E '^(SPECULUM_USERNAME|SPECULUM_PASSWORD)=' "$ENV_FILE" >"$tmp" || true
+  printf 'SPECULUM_USERNAME=%s\n' "$(quote_for_env "$SPECULUM_USERNAME")" >>"$tmp"
+  printf 'SPECULUM_PASSWORD=%s\n' "$(quote_for_env "$SPECULUM_PASSWORD")" >>"$tmp"
+
+  "${SUDO[@]}" install -m 600 "$tmp" "$ENV_FILE"
+  rm -f "$tmp"
+  printf 'Updated Speculum login for %s in %s\n' "$SPECULUM_USERNAME" "$ENV_FILE"
 }
 
 install_systemd_service() {

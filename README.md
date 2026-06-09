@@ -71,6 +71,7 @@ The script pulls the current branch, installs the Rails bundle, precompiles asse
 ```bash
 PORT=3001 SERVICE_NAME=speculum ./scripts/deploy_speculum.sh
 RUN_TESTS=1 ./scripts/deploy_speculum.sh
+RESET_CREDENTIALS=1 SPECULUM_USERNAME=admin SPECULUM_PASSWORD='new-password' ./scripts/deploy_speculum.sh
 ```
 
 If `/etc/speculum/speculum.env` already exists, the deploy keeps it unchanged so production credentials are not overwritten.
