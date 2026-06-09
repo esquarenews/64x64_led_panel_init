@@ -22,7 +22,14 @@ module Speculum
     end
 
     def start(settings)
-      raise "Speculum is already running" if running?
+      if running?
+        if unhealthy?
+          restart(settings)
+          return :restarted
+        end
+
+        raise "Speculum is already running"
+      end
 
       FileUtils.mkdir_p(Paths.runtime_root)
       FileUtils.rm_f(Paths.state_file)
@@ -51,6 +58,17 @@ module Speculum
     def restart(settings)
       pause if running?
       start(settings)
+    end
+
+    def unhealthy?(max_startup_age: 90)
+      return false unless running?
+      return false if player_state || displaying_state
+
+      if Paths.pidfile.exist?
+        Time.now - Paths.pidfile.mtime > max_startup_age
+      else
+        true
+      end
     end
 
     def recent_log(lines: 12)

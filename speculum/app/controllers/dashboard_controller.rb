@@ -35,8 +35,9 @@ class DashboardController < ApplicationController
 
   def start
     settings = Speculum::Settings.load
-    Speculum::ProcessManager.new.start(settings)
-    redirect_to root_path, notice: "Speculum started"
+    result = Speculum::ProcessManager.new.start(settings)
+    message = result == :restarted ? "Speculum recovered and restarted" : "Speculum started"
+    redirect_to root_path, notice: message
   rescue StandardError => e
     redirect_to root_path, alert: e.message
   end
