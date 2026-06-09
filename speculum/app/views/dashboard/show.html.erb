@@ -59,7 +59,12 @@
     <section class="preview-grid">
       <article class="preview-pane">
         <div class="pane-header">
-          <span>Current</span>
+          <div>
+            <span>Current</span>
+            <% if @preview[:timer] %>
+              <small class="preview-timer" data-countdown-prefix="Changes in" data-countdown-started-at="<%= @preview[:timer][:started_at] %>" data-countdown-duration="<%= @preview[:timer][:duration] %>">Changes in --:--</small>
+            <% end %>
+          </div>
           <strong><%= @preview[:current]&.dig(:name) || "Waiting" %></strong>
         </div>
         <% if @preview[:current] %>
@@ -71,7 +76,12 @@
 
       <article class="preview-pane">
         <div class="pane-header">
-          <span>Next</span>
+          <div>
+            <span>Next</span>
+            <% if @preview[:timer] %>
+              <small class="preview-timer" data-countdown-prefix="Up in" data-countdown-started-at="<%= @preview[:timer][:started_at] %>" data-countdown-duration="<%= @preview[:timer][:duration] %>">Up in --:--</small>
+            <% end %>
+          </div>
           <strong><%= @preview[:next]&.dig(:name) || "Waiting" %></strong>
         </div>
         <% if @preview[:next] %>
@@ -190,8 +200,9 @@
           <div class="toggle-list">
             <% [["Overlay text", :overlay], ["Calendar text", :calendar], ["Color correction", :color_correct], ["Dither", :dither], ["Manual advance", :manual], ["Reset before run", :hard_reset_before_start]].each do |label, key| %>
               <label class="toggle">
-                <%= form.check_box key, checked: @settings[key.to_s].to_s == "1" %>
                 <span><%= label %></span>
+                <%= form.check_box key, checked: @settings[key.to_s].to_s == "1" %>
+                <i aria-hidden="true"></i>
               </label>
             <% end %>
           </div>

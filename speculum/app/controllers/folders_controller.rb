@@ -1,6 +1,10 @@
 class FoldersController < ApplicationController
   def create
-    library.create_folder(params.require(:name))
+    name = library.create_folder(params.require(:name))
+    settings = Speculum::Settings.load
+    settings["folder_order"] = (Speculum::ImageLibrary.new(settings).ordered_folder_names + [name]).uniq
+    settings["selected_folder"] = name
+    Speculum::Settings.save(settings)
     redirect_to root_path, notice: "Folder created"
   rescue StandardError => e
     redirect_to root_path, alert: e.message

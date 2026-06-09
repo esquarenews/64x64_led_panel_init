@@ -47,7 +47,7 @@ class ProcessManagerTest < ActiveSupport::TestCase
         project_root.join("IMG/alpha.png").write("image")
         project_root.join("IMG/bravo.png").write("image")
         runtime_root.join("speculum.log").write("READY\nSending stale.png...\nDONE\n")
-        runtime_root.join("player_state.json").write(JSON.generate("current" => "bravo.png", "next" => "alpha.png"))
+        runtime_root.join("player_state.json").write(JSON.generate("current" => "bravo.png", "next" => "alpha.png", "dwell_seconds" => 60, "updated_at" => "2026-06-10T00:00:00Z"))
 
         stub_singleton_method(Speculum::Paths, :project_root, project_root) do
           stub_singleton_method(Speculum::Paths, :logfile, runtime_root.join("speculum.log")) do
@@ -59,6 +59,8 @@ class ProcessManagerTest < ActiveSupport::TestCase
 
                 assert_equal "bravo.png", preview[:current][:name]
                 assert_equal "alpha.png", preview[:next][:name]
+                assert_equal 60, preview[:timer][:duration]
+                assert_equal "2026-06-10T00:00:00Z", preview[:timer][:started_at]
               end
             end
           end

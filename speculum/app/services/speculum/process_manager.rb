@@ -60,7 +60,8 @@ module Speculum
         next_image = queued_image_name.presence || state["next"]
         return {
           current: current && library.image_record_for(folder, current),
-          next: next_image && library.image_record_for(folder, next_image)
+          next: next_image && library.image_record_for(folder, next_image),
+          timer: timer_state(state)
         }
       end
 
@@ -77,11 +78,23 @@ module Speculum
       next_image = queued || next_image_name(image_names, current)
       {
         current: current_record || (current && library.image_record_for(folder, current)),
-        next: queued_record || (next_image && library.image_record_for(folder, next_image))
+        next: queued_record || (next_image && library.image_record_for(folder, next_image)),
+        timer: nil
       }
     end
 
     private
+
+    def timer_state(state)
+      duration = state["dwell_seconds"].to_i
+      started_at = state["updated_at"].to_s
+      return if duration <= 0 || started_at.blank?
+
+      {
+        started_at: started_at,
+        duration: duration
+      }
+    end
 
     def player_state
       return unless Paths.state_file.exist?

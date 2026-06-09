@@ -107,6 +107,20 @@ class ImageLibraryTest < ActiveSupport::TestCase
     end
   end
 
+  test "includes empty folders that are managed in settings" do
+    Dir.mktmpdir do |project_dir|
+      project_root = Pathname.new(project_dir)
+      FileUtils.mkdir_p(project_root.join("empty-folder"))
+      FileUtils.mkdir_p(project_root.join("speculum"))
+
+      stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+        library = Speculum::ImageLibrary.new("selected_folder" => "empty-folder", "folder_order" => ["empty-folder"])
+
+        assert_equal ["empty-folder"], library.ordered_folder_names
+      end
+    end
+  end
+
   test "reuses one folder scan across request level image lookups" do
     Dir.mktmpdir do |project_dir|
       project_root = Pathname.new(project_dir)

@@ -60,6 +60,28 @@
     });
   };
 
+  const formatRemaining = (seconds) => {
+    const clamped = Math.max(0, seconds);
+    const minutes = Math.floor(clamped / 60).toString().padStart(2, "0");
+    const remainder = Math.floor(clamped % 60).toString().padStart(2, "0");
+    return `${minutes}:${remainder}`;
+  };
+
+  const updateCountdowns = () => {
+    document.querySelectorAll("[data-countdown-started-at][data-countdown-duration]").forEach((timer) => {
+      const startedAt = Date.parse(timer.dataset.countdownStartedAt);
+      const duration = Number.parseInt(timer.dataset.countdownDuration, 10);
+      if (Number.isNaN(startedAt) || Number.isNaN(duration) || duration <= 0) return;
+
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const remaining = Math.max(0, duration - elapsed);
+      timer.textContent = `${timer.dataset.countdownPrefix} ${formatRemaining(remaining)}`;
+    });
+  };
+
+  updateCountdowns();
+  window.setInterval(updateCountdowns, 1000);
+
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || form.dataset.noLoading === "true") return;

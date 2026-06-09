@@ -97,7 +97,9 @@ module Speculum
     end
 
     def create_folder(name)
-      FileUtils.mkdir_p(folder_path(assert_safe_name(name, "folder")))
+      safe_name = assert_safe_name(name, "folder")
+      FileUtils.mkdir_p(folder_path(safe_name))
+      safe_name
     end
 
     def rename_folder(old_name, new_name)
@@ -131,11 +133,12 @@ module Speculum
     private
 
     def discovered_folder_names
+      managed_names = Array(settings["folder_order"])
       Speculum::Paths.project_root.children
                       .select(&:directory?)
                       .map { |path| path.basename.to_s }
                       .select { |name| safe_name?(name) }
-                      .select { |name| name.start_with?("IMG") || folder_has_images?(name) }
+                      .select { |name| managed_names.include?(name) || name.start_with?("IMG") || folder_has_images?(name) }
                       .sort_by(&:downcase)
     end
 

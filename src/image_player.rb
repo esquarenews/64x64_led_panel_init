@@ -1947,7 +1947,7 @@ def wait_for_ready(transport, options)
   transport
 end
 
-def write_player_state(state_file, current:, next_image:)
+def write_player_state(state_file, current:, next_image:, dwell_seconds: nil)
   return if state_file.nil? || state_file.empty?
 
   FileUtils.mkdir_p(File.dirname(state_file))
@@ -1955,6 +1955,7 @@ def write_player_state(state_file, current:, next_image:)
   payload = {
     current: current && File.basename(current),
     next: next_image && File.basename(next_image),
+    dwell_seconds: dwell_seconds,
     updated_at: Time.now.utc.iso8601
   }
   File.write(temp, JSON.generate(payload))
@@ -2104,7 +2105,12 @@ loop do
       end
 
     frames_sent += 1
-    write_player_state(options[:state_file], current: image_path, next_image: next_image)
+    write_player_state(
+      options[:state_file],
+      current: image_path,
+      next_image: next_image,
+      dwell_seconds: options[:manual] ? nil : options[:dwell]
+    )
 
     if options[:single]
       puts 'Single image mode enabled; holding current image and exiting.'

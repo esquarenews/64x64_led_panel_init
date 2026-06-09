@@ -88,4 +88,34 @@ class ProductionConfigTest < ActiveSupport::TestCase
     assert_includes dashboard, "speculum-logo.png"
     assert_includes login, "speculum-logo.png"
   end
+
+  test "settings toggles use switch styling" do
+    dashboard = Rails.root.join("app/views/dashboard/show.html.erb").read
+    stylesheet = Rails.root.join("app/assets/stylesheets/application.css").read
+
+    assert_includes dashboard, 'class="toggle"'
+    assert_includes dashboard, '<i aria-hidden="true"></i>'
+    assert_includes stylesheet, ".toggle input:checked + i"
+    assert_includes stylesheet, "white-space: nowrap"
+  end
+
+  test "preview countdown assets are wired" do
+    dashboard = Rails.root.join("app/views/dashboard/show.html.erb").read
+    javascript = Rails.root.join("app/assets/javascripts/application.js").read
+    stylesheet = Rails.root.join("app/assets/stylesheets/application.css").read
+
+    assert_includes dashboard, "data-countdown-started-at"
+    assert_includes dashboard, "Changes in"
+    assert_includes dashboard, "Up in"
+    assert_includes javascript, "updateCountdowns"
+    assert_includes stylesheet, ".preview-timer"
+  end
+
+  test "upload file input has a wide layout" do
+    stylesheet = Rails.root.join("app/assets/stylesheets/application.css").read
+
+    assert_includes stylesheet, "flex: 0 1 520px"
+    assert_includes stylesheet, "min-width: 280px"
+    assert_not_includes stylesheet, "max-width: 210px"
+  end
 end
