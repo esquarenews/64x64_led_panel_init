@@ -90,6 +90,25 @@ class ImageLibraryTest < ActiveSupport::TestCase
     end
   end
 
+  test "reuses one folder scan across request level image lookups" do
+    Dir.mktmpdir do |project_dir|
+      project_root = Pathname.new(project_dir)
+      FileUtils.mkdir_p(project_root.join("IMG"))
+      project_root.join("IMG/alpha.png").write("image")
+
+      stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+        library = Speculum::ImageLibrary.new("selected_folder" => "IMG")
+
+        assert_equal 1, library.image_count("IMG")
+
+        project_root.join("IMG/bravo.png").write("image")
+
+        assert_equal ["alpha.png"], library.image_names("IMG")
+        assert_equal 1, library.images_page("IMG", page: 1, per_page: 10)[:total]
+      end
+    end
+  end
+
   test "removes a folder and its images" do
     Dir.mktmpdir do |project_dir|
       project_root = Pathname.new(project_dir)

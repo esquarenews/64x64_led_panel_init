@@ -68,8 +68,11 @@ class ProductionConfigTest < ActiveSupport::TestCase
     assert status.success?, stderr
     assert_includes layout, 'javascript_include_tag "application"'
     assert_includes javascript, "form.classList.add(\"is-submitting\")"
+    assert_includes javascript, "submitAfterPaint(form)"
+    assert_includes javascript, "loading-overlay"
     assert_includes javascript, "Deleting..."
     assert_includes stylesheet, "button.is-submitting"
+    assert_includes stylesheet, ".loading-overlay"
   end
 
   test "logo assets are wired for branding and favicon" do

@@ -1,3 +1,5 @@
+require "set"
+
 module Speculum
   class ProcessManager
     def running?
@@ -53,8 +55,9 @@ module Speculum
     def preview(library, settings)
       folder = settings["selected_folder"]
       image_names = library.image_names(folder)
-      current = current_image_name(image_names) || image_names.first
-      queued = queued_image_name(image_names)
+      image_name_set = image_names.to_set
+      current = current_image_name(image_name_set) || image_names.first
+      queued = queued_image_name(image_name_set)
       next_image = queued || next_image_name(image_names, current)
       {
         current: current && library.image_record_for(folder, current),
@@ -72,11 +75,11 @@ module Speculum
       Process.kill("KILL", -pid) if running?
     end
 
-    def current_image_name(image_names)
+    def current_image_name(image_name_set)
       recent_log(lines: 100).reverse_each do |line|
         if (match = line.match(/\ASending (.+)\.\.\.\z/))
           name = match[1]
-          return name if image_names.include?(name)
+          return name if image_name_set.include?(name)
         end
       end
       nil
@@ -90,11 +93,11 @@ module Speculum
       image_names[(index + 1) % image_names.length]
     end
 
-    def queued_image_name(image_names)
+    def queued_image_name(image_name_set)
       return unless Paths.queue_file.exist?
 
       name = Paths.queue_file.read.strip
-      image_names.include?(name) ? name : nil
+      image_name_set.include?(name) ? name : nil
     end
 
     def tail_lines(path, lines)

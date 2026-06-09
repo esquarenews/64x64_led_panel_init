@@ -32,29 +32,29 @@ module Speculum
     end
 
     def image_names(folder)
-      image_paths(folder).map { |path| path.basename.to_s }
+      image_filenames(folder)
     end
 
     def image_count(folder)
-      image_paths(folder).length
+      image_filenames(folder).length
     end
 
     def images_page(folder, page:, per_page:)
       page = [page.to_i, 1].max
       per_page = [per_page.to_i, 1].max
-      paths = image_paths(folder)
+      filenames = image_filenames(folder)
       offset = (page - 1) * per_page
       {
-        records: (paths.slice(offset, per_page) || []).map { |path| image_record(folder, path) },
-        total: paths.length,
+        records: (filenames.slice(offset, per_page) || []).map { |name| image_record_for_name(folder, name) },
+        total: filenames.length,
         page: page,
         per_page: per_page,
-        total_pages: [(paths.length.to_f / per_page).ceil, 1].max
+        total_pages: [(filenames.length.to_f / per_page).ceil, 1].max
       }
     end
 
     def image_record_for(folder, name)
-      image_record(folder, image_path(folder, name))
+      image_record_for_name(folder, image_path(folder, name).basename.to_s)
     rescue StandardError
       nil
     end
@@ -139,11 +139,26 @@ module Speculum
     end
 
     def image_paths(folder)
-      folder_path(folder).children
-                         .select { |path| path.file? && SUPPORTED_EXTENSIONS.include?(path.extname.downcase) }
-                         .sort_by { |path| path.basename.to_s.downcase }
+      image_filenames(folder).map { |name| folder_path(folder).join(name) }
     rescue Errno::ENOENT
       []
+    end
+
+    def image_filenames(folder)
+      safe_folder = assert_safe_name(folder, "folder")
+      @image_filenames ||= {}
+      @image_filenames[safe_folder] ||= begin
+        folder = folder_path(safe_folder)
+        Dir.children(folder)
+           .select { |name| SUPPORTED_EXTENSIONS.include?(File.extname(name).downcase) && folder.join(name).file? }
+           .sort_by(&:downcase)
+      rescue Errno::ENOENT
+        []
+      end
+    end
+
+    def image_record_for_name(folder, name)
+      image_record(folder, folder_path(folder).join(name))
     end
 
     def image_record(folder, path)

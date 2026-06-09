@@ -35,9 +35,35 @@
     return match ? match[1] : "Working...";
   };
 
+  const showLoadingOverlay = (label) => {
+    let overlay = document.querySelector("[data-loading-overlay]");
+
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.className = "loading-overlay";
+      overlay.dataset.loadingOverlay = "true";
+      overlay.setAttribute("role", "status");
+      overlay.setAttribute("aria-live", "polite");
+      overlay.innerHTML = '<span class="loading-spinner" aria-hidden="true"></span><span data-loading-label></span>';
+      document.body.appendChild(overlay);
+    }
+
+    overlay.querySelector("[data-loading-label]").textContent = label;
+    overlay.hidden = false;
+  };
+
+  const submitAfterPaint = (form) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        HTMLFormElement.prototype.submit.call(form);
+      });
+    });
+  };
+
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || form.dataset.noLoading === "true") return;
+    if (form.dataset.loadingSubmitted === "true") return;
 
     const confirmation = form.dataset.turboConfirm;
     if (confirmation && !window.confirm(confirmation)) {
@@ -45,9 +71,13 @@
       return;
     }
 
+    event.preventDefault();
+
     const submitter = event.submitter || form.querySelector("button[type='submit'], button:not([type]), input[type='submit']");
+    const label = workingLabelFor(submitter);
     form.classList.add("is-submitting");
     form.setAttribute("aria-busy", "true");
+    form.dataset.loadingSubmitted = "true";
 
     form.querySelectorAll("button[type='submit'], button:not([type]), input[type='submit']").forEach((button) => {
       button.disabled = true;
@@ -56,7 +86,10 @@
     if (submitter) {
       submitter.classList.add("is-submitting");
       submitter.dataset.originalLabel = submitterText(submitter);
-      setSubmitterText(submitter, workingLabelFor(submitter));
+      setSubmitterText(submitter, label);
     }
+
+    showLoadingOverlay(label);
+    submitAfterPaint(form);
   }, true);
 })();
