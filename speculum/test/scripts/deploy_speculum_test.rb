@@ -25,4 +25,10 @@ class DeploySpeculumTest < ActiveSupport::TestCase
     assert_includes script, "RESET_CREDENTIALS"
     assert_includes script, "SPECULUM_PASSWORD"
   end
+
+  test "deployment bundle install path is ignored" do
+    gitignore = Rails.root.join(".gitignore").read
+
+    assert_includes gitignore, "/vendor/bundle"
+  end
 end
