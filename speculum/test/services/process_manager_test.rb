@@ -12,6 +12,40 @@ class ProcessManagerTest < ActiveSupport::TestCase
     end
   end
 
+  test "running player without display state becomes unhealthy after startup window" do
+    Dir.mktmpdir do |runtime_dir|
+      runtime_root = Pathname.new(runtime_dir)
+      pidfile = runtime_root.join("speculum.pid")
+      pidfile.write(Process.pid.to_s)
+      FileUtils.touch(pidfile, mtime: Time.now - 120)
+
+      stub_singleton_method(Speculum::Paths, :pidfile, pidfile) do
+        stub_singleton_method(Speculum::Paths, :state_file, runtime_root.join("player_state.json")) do
+          stub_singleton_method(Speculum::Paths, :logfile, runtime_root.join("speculum.log")) do
+            assert Speculum::ProcessManager.new.unhealthy?
+          end
+        end
+      end
+    end
+  end
+
+  test "running player with display state is healthy" do
+    Dir.mktmpdir do |runtime_dir|
+      runtime_root = Pathname.new(runtime_dir)
+      pidfile = runtime_root.join("speculum.pid")
+      statefile = runtime_root.join("player_state.json")
+      pidfile.write(Process.pid.to_s)
+      FileUtils.touch(pidfile, mtime: Time.now - 120)
+      statefile.write(JSON.generate("current" => "alpha.png", "updated_at" => Time.now.utc.iso8601, "dwell_seconds" => 60))
+
+      stub_singleton_method(Speculum::Paths, :pidfile, pidfile) do
+        stub_singleton_method(Speculum::Paths, :state_file, statefile) do
+          assert_not Speculum::ProcessManager.new.unhealthy?
+        end
+      end
+    end
+  end
+
   test "preview shows queued image as next image" do
     Dir.mktmpdir do |project_dir|
       Dir.mktmpdir do |runtime_dir|

@@ -49,7 +49,14 @@ class DashboardController < ApplicationController
 
   def reset
     Speculum::PortResetter.new.reset_all
-    redirect_to root_path, notice: "Reset pulse sent to available USB serial ports"
+    player = Speculum::ProcessManager.new
+    if player.running?
+      settings = Speculum::Settings.load
+      player.restart(settings.merge("hard_reset_before_start" => "1"))
+      redirect_to root_path, notice: "Panel reset and Speculum restarted"
+    else
+      redirect_to root_path, notice: "Reset pulse sent to available USB serial ports"
+    end
   rescue StandardError => e
     redirect_to root_path, alert: e.message
   end
