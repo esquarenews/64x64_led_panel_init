@@ -57,4 +57,21 @@ SPECULUM_USERNAME=admin SPECULUM_PASSWORD='change-me' bundle exec rails server -
 ```
 
 By default the app launches `../src/image_player.rb` with serial transport, `--port auto`, and `--hard-reset`. Set `SPECULUM_RUBY=/path/to/ruby` if the server needs a specific Ruby executable for the sender.
+
+### Production deploy
+
+On the production server, run this from the repository checkout:
+
+```bash
+./scripts/deploy_speculum.sh
+```
+
+The script pulls the current branch, installs the Rails bundle, precompiles assets, creates `/etc/speculum/speculum.env` on first run, installs/enables a `speculum` systemd service, and restarts it. Useful overrides:
+
+```bash
+PORT=3001 SERVICE_NAME=speculum ./scripts/deploy_speculum.sh
+RUN_TESTS=1 ./scripts/deploy_speculum.sh
+```
+
+If `/etc/speculum/speculum.env` already exists, the deploy keeps it unchanged so production credentials are not overwritten.
 # 64x64_led_panel_init
