@@ -90,6 +90,23 @@ class ImageLibraryTest < ActiveSupport::TestCase
     end
   end
 
+  test "ignores unsupported or unsafe image filenames" do
+    Dir.mktmpdir do |project_dir|
+      project_root = Pathname.new(project_dir)
+      FileUtils.mkdir_p(project_root.join("IMG"))
+      project_root.join("IMG/good.png").write("image")
+      project_root.join("IMG/bad:name.png").write("image")
+      project_root.join("IMG/notes.txt").write("text")
+
+      stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+        library = Speculum::ImageLibrary.new("selected_folder" => "IMG")
+
+        assert_equal ["good.png"], library.image_names("IMG")
+        assert_equal 1, library.image_count("IMG")
+      end
+    end
+  end
+
   test "reuses one folder scan across request level image lookups" do
     Dir.mktmpdir do |project_dir|
       project_root = Pathname.new(project_dir)

@@ -160,6 +160,7 @@ module Speculum
       names = []
       path = folder_path(folder)
       Dir.each_child(path) do |name|
+        next unless safe_name?(name)
         next unless SUPPORTED_EXTENSIONS.include?(File.extname(name).downcase)
         next unless path.join(name).file?
 
@@ -178,6 +179,7 @@ module Speculum
         count = 0
         path = folder_path(safe_folder)
         Dir.each_child(path) do |name|
+          next unless safe_name?(name)
           next unless SUPPORTED_EXTENSIONS.include?(File.extname(name).downcase)
           next unless path.join(name).file?
 

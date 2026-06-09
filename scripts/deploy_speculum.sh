@@ -214,7 +214,7 @@ bundle install
 log "Preparing Rails runtime"
 mkdir -p storage/runtime log tmp/pids
 RAILS_ENV="$RAILS_ENV" SECRET_KEY_BASE_DUMMY=1 bundle exec rails assets:precompile
-RAILS_ENV="$RAILS_ENV" SECRET_KEY_BASE_DUMMY=1 bundle exec rails speculum:thumbnails:warm
+RAILS_ENV="$RAILS_ENV" SECRET_KEY_BASE_DUMMY=1 bundle exec rails speculum:thumbnails:warm || log "Thumbnail warmup failed; continuing deploy"
 
 if [[ "$RUN_TESTS" == "1" ]]; then
   log "Running tests"
