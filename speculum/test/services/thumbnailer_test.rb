@@ -2,6 +2,20 @@ require "test_helper"
 require "tmpdir"
 
 class ThumbnailerTest < ActiveSupport::TestCase
+  test "returns nil for missing cached thumbnail without generating" do
+    Dir.mktmpdir do |project_dir|
+      source = Pathname.new(project_dir).join("source.png")
+      source.write("not an image")
+
+      assert_nil Speculum::Thumbnailer.new.cached_thumbnail_path(source)
+    end
+  end
+
+  test "placeholder svg is lightweight" do
+    assert_includes Speculum::Thumbnailer::PLACEHOLDER_SVG, "Thumbnail pending"
+    assert_operator Speculum::Thumbnailer::PLACEHOLDER_SVG.bytesize, :<, 2_000
+  end
+
   test "falls back to source image when thumbnail generation fails" do
     Dir.mktmpdir do |project_dir|
       source = Pathname.new(project_dir).join("source.png")

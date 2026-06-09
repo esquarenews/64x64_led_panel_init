@@ -23,7 +23,12 @@ class ImagesController < ApplicationController
   def thumbnail
     path = library.image_path(params.require(:folder), params.require(:name))
     expires_in 30.days, public: true
-    send_file Speculum::Thumbnailer.new.thumbnail_path(path), disposition: "inline"
+    if (thumbnail = Speculum::Thumbnailer.new.cached_thumbnail_path(path))
+      send_file thumbnail, disposition: "inline"
+    else
+      expires_in 5.minutes, public: true
+      render plain: Speculum::Thumbnailer::PLACEHOLDER_SVG, content_type: "image/svg+xml"
+    end
   rescue StandardError
     head :not_found
   end

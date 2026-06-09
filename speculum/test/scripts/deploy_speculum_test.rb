@@ -16,6 +16,7 @@ class DeploySpeculumTest < ActiveSupport::TestCase
     assert_includes script, "git pull --ff-only origin"
     assert_includes script, "bundle install"
     assert_includes script, "rails assets:precompile"
+    assert_includes script, "rails speculum:thumbnails:warm"
     assert_includes script, "systemctl restart"
     assert_includes script, "bundle exec rails server"
     assert_includes script, "EnvironmentFile=$ENV_FILE"

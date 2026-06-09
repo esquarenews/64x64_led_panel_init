@@ -67,7 +67,9 @@ module Speculum
       ext = File.extname(filename).downcase
       raise "Unsupported image type" unless SUPPORTED_EXTENSIONS.include?(ext)
 
-      FileUtils.cp(upload.tempfile.path, target_folder.join(filename))
+      target = target_folder.join(filename)
+      FileUtils.cp(upload.tempfile.path, target)
+      Speculum::Thumbnailer.new.warm(target)
     end
 
     def delete_image(folder, name)
