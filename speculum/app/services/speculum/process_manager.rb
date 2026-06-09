@@ -61,11 +61,12 @@ module Speculum
         return {
           current: current && library.image_record_for(folder, current),
           next: next_image && library.image_record_for(folder, next_image),
-          timer: timer_state(state)
+          timer: timer_state(state) || timer_state(displaying_state)
         }
       end
 
-      current = current_image_name
+      display_state = displaying_state
+      current = display_state&.dig("current") || current_image_name
       current_record = current && library.image_record_for(folder, current)
       current = nil unless current_record
 
@@ -79,13 +80,15 @@ module Speculum
       {
         current: current_record || (current && library.image_record_for(folder, current)),
         next: queued_record || (next_image && library.image_record_for(folder, next_image)),
-        timer: nil
+        timer: display_state && timer_state(display_state)
       }
     end
 
     private
 
     def timer_state(state)
+      return unless state
+
       duration = state["dwell_seconds"].to_i
       started_at = state["updated_at"].to_s
       return if duration <= 0 || started_at.blank?
@@ -104,6 +107,23 @@ module Speculum
 
       state
     rescue JSON::ParserError, Errno::ENOENT
+      nil
+    end
+
+    def displaying_state
+      return unless Paths.logfile.exist?
+
+      recent_log(lines: 120).reverse_each do |line|
+        if (match = line.match(/\ADisplaying (.+) for (\d+) seconds\.\.\.\z/))
+          return {
+            "current" => match[1],
+            "dwell_seconds" => match[2].to_i,
+            "updated_at" => Paths.logfile.mtime.utc.iso8601
+          }
+        end
+      end
+      nil
+    rescue Errno::ENOENT
       nil
     end
 

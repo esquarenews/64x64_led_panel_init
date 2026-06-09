@@ -96,7 +96,37 @@ class ProcessManagerTest < ActiveSupport::TestCase
     end
   end
 
-  test "preview uses the most recent sent image and next image" do
+  test "preview uses displayed image and countdown before sent image fallback" do
+    Dir.mktmpdir do |project_dir|
+      Dir.mktmpdir do |runtime_dir|
+        project_root = Pathname.new(project_dir)
+        runtime_root = Pathname.new(runtime_dir)
+        FileUtils.mkdir_p(project_root.join("IMG"))
+        project_root.join("IMG/alpha.png").write("image")
+        project_root.join("IMG/bravo.png").write("image")
+        logfile = runtime_root.join("speculum.log")
+        logfile.write("READY\nSending bravo.png...\nDONE\nDisplaying alpha.png for 60 seconds...\n")
+        FileUtils.touch(logfile, mtime: Time.utc(2026, 6, 10, 0, 0, 0))
+
+        stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+          stub_singleton_method(Speculum::Paths, :runtime_root, runtime_root) do
+            stub_singleton_method(Speculum::Paths, :logfile, logfile) do
+              settings = Speculum::Settings::DEFAULTS.merge("selected_folder" => "IMG")
+              library = Speculum::ImageLibrary.new(settings)
+              preview = Speculum::ProcessManager.new.preview(library, settings)
+
+              assert_equal "alpha.png", preview[:current][:name]
+              assert_equal "bravo.png", preview[:next][:name]
+              assert_equal 60, preview[:timer][:duration]
+              assert_equal "2026-06-10T00:00:00Z", preview[:timer][:started_at]
+            end
+          end
+        end
+      end
+    end
+  end
+
+  test "preview falls back to most recent sent image when display line is unavailable" do
     Dir.mktmpdir do |project_dir|
       Dir.mktmpdir do |runtime_dir|
         project_root = Pathname.new(project_dir)

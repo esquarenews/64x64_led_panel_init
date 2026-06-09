@@ -108,6 +108,7 @@ class ProductionConfigTest < ActiveSupport::TestCase
     assert_includes dashboard, "Changes in"
     assert_includes dashboard, "Up in"
     assert_includes javascript, "updateCountdowns"
+    assert_includes javascript, "window.location.reload"
     assert_includes stylesheet, ".preview-timer"
   end
 

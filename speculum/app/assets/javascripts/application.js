@@ -76,6 +76,11 @@
       const elapsed = Math.floor((Date.now() - startedAt) / 1000);
       const remaining = Math.max(0, duration - elapsed);
       timer.textContent = `${timer.dataset.countdownPrefix} ${formatRemaining(remaining)}`;
+
+      if (remaining === 0 && elapsed <= duration + 2 && !window.__previewReloadQueued) {
+        window.__previewReloadQueued = true;
+        window.setTimeout(() => window.location.reload(), 1500);
+      }
     });
   };
 
