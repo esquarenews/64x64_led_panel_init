@@ -7,6 +7,7 @@ class ProductionConfigTest < ActiveSupport::TestCase
       require_relative "config/environment"
       config = Rails.application.config
       abort "missing host" unless config.hosts.include?("speculum.esquarenews.tech")
+      abort "missing localhost health host" unless config.hosts.include?("127.0.0.1")
       abort "assume_ssl disabled" unless config.assume_ssl
     RUBY
 

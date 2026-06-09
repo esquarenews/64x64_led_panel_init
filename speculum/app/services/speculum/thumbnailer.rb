@@ -28,6 +28,13 @@ module Speculum
       target if target.exist?
     end
 
+    def delete(source)
+      source = Pathname.new(source)
+      FileUtils.rm_f(Paths.thumbnail_root.join(cache_name(source)))
+    rescue StandardError
+      nil
+    end
+
     def warm(source)
       source = Pathname.new(source)
       FileUtils.mkdir_p(Paths.thumbnail_root)

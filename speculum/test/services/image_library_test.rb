@@ -67,7 +67,7 @@ class ImageLibraryTest < ActiveSupport::TestCase
         page = library.images_page("IMG", page: 2, per_page: 2)
 
         assert_equal 5, page[:total]
-        assert_equal 3, page[:total_pages]
+        assert page[:has_next]
         assert_equal 2, page[:records].length
         assert_equal ["2.png", "3.png"], page[:records].map { |image| image[:name] }
       end
@@ -99,12 +99,11 @@ class ImageLibraryTest < ActiveSupport::TestCase
       stub_singleton_method(Speculum::Paths, :project_root, project_root) do
         library = Speculum::ImageLibrary.new("selected_folder" => "IMG")
 
-        assert_equal 1, library.image_count("IMG")
+        assert_equal ["alpha.png"], library.image_names("IMG")
 
         project_root.join("IMG/bravo.png").write("image")
 
         assert_equal ["alpha.png"], library.image_names("IMG")
-        assert_equal 1, library.images_page("IMG", page: 1, per_page: 10)[:total]
       end
     end
   end

@@ -16,7 +16,10 @@ Rails.application.routes.draw do
     end
   end
 
-  resources :images, only: %i[create destroy], param: :name do
+  delete "images", to: "images#destroy", as: :delete_image
+  delete "images/:name", to: "images#destroy"
+
+  resources :images, only: %i[create], param: :name do
     collection do
       get :show_file
       get :thumbnail

@@ -1,5 +1,3 @@
-require "set"
-
 module Speculum
   class ProcessManager
     def running?
@@ -54,14 +52,20 @@ module Speculum
 
     def preview(library, settings)
       folder = settings["selected_folder"]
-      image_names = library.image_names(folder)
-      image_name_set = image_names.to_set
-      current = current_image_name(image_name_set) || image_names.first
-      queued = queued_image_name(image_name_set)
+      current = current_image_name
+      current_record = current && library.image_record_for(folder, current)
+      current = nil unless current_record
+
+      queued = queued_image_name
+      queued_record = queued && library.image_record_for(folder, queued)
+      queued = nil unless queued_record
+
+      image_names = library.image_names(folder, limit: 250)
+      current ||= image_names.first
       next_image = queued || next_image_name(image_names, current)
       {
-        current: current && library.image_record_for(folder, current),
-        next: next_image && library.image_record_for(folder, next_image)
+        current: current_record || (current && library.image_record_for(folder, current)),
+        next: queued_record || (next_image && library.image_record_for(folder, next_image))
       }
     end
 
@@ -75,11 +79,10 @@ module Speculum
       Process.kill("KILL", -pid) if running?
     end
 
-    def current_image_name(image_name_set)
+    def current_image_name
       recent_log(lines: 100).reverse_each do |line|
         if (match = line.match(/\ASending (.+)\.\.\.\z/))
-          name = match[1]
-          return name if image_name_set.include?(name)
+          return match[1]
         end
       end
       nil
@@ -93,11 +96,10 @@ module Speculum
       image_names[(index + 1) % image_names.length]
     end
 
-    def queued_image_name(image_name_set)
+    def queued_image_name
       return unless Paths.queue_file.exist?
 
-      name = Paths.queue_file.read.strip
-      image_name_set.include?(name) ? name : nil
+      Paths.queue_file.read.strip
     end
 
     def tail_lines(path, lines)

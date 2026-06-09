@@ -2,6 +2,7 @@ class DashboardController < ApplicationController
   IMAGES_PER_PAGE = 18
 
   def show
+    expires_now
     @settings = Speculum::Settings.load
     @library = Speculum::ImageLibrary.new(@settings)
     @player = Speculum::ProcessManager.new

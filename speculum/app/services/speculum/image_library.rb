@@ -31,25 +31,28 @@ module Speculum
       image_paths(folder).map { |path| image_record(folder, path) }
     end
 
-    def image_names(folder)
-      image_filenames(folder)
+    def image_names(folder, limit: nil)
+      image_filenames(folder, limit: limit)
     end
 
     def image_count(folder)
-      image_filenames(folder).length
+      bounded_image_count(folder)
     end
 
     def images_page(folder, page:, per_page:)
       page = [page.to_i, 1].max
       per_page = [per_page.to_i, 1].max
-      filenames = image_filenames(folder)
       offset = (page - 1) * per_page
+      filenames = image_filenames(folder, limit: offset + per_page + 1)
+      page_filenames = filenames.slice(offset, per_page) || []
+      has_next = filenames.length > offset + per_page
       {
-        records: (filenames.slice(offset, per_page) || []).map { |name| image_record_for_name(folder, name) },
-        total: filenames.length,
+        records: page_filenames.map { |name| image_record_for_name(folder, name) },
+        total: bounded_image_count(folder),
+        total_label: image_count_label(folder),
         page: page,
         per_page: per_page,
-        total_pages: [(filenames.length.to_f / per_page).ceil, 1].max
+        has_next: has_next
       }
     end
 
@@ -82,7 +85,9 @@ module Speculum
     end
 
     def delete_image(folder, name)
-      FileUtils.rm(image_path(folder, name))
+      path = image_path(folder, name)
+      Speculum::Thumbnailer.new.delete(path)
+      FileUtils.rm(path)
     end
 
     def queue_image(folder, name)
@@ -130,7 +135,7 @@ module Speculum
                       .select(&:directory?)
                       .map { |path| path.basename.to_s }
                       .select { |name| safe_name?(name) }
-                      .select { |name| name.start_with?("IMG") || image_count(name).positive? }
+                      .select { |name| name.start_with?("IMG") || folder_has_images?(name) }
                       .sort_by(&:downcase)
     end
 
@@ -144,17 +149,54 @@ module Speculum
       []
     end
 
-    def image_filenames(folder)
+    def image_filenames(folder, limit: nil)
       safe_folder = assert_safe_name(folder, "folder")
+      cache_key = [safe_folder, limit]
       @image_filenames ||= {}
-      @image_filenames[safe_folder] ||= begin
-        folder = folder_path(safe_folder)
-        Dir.children(folder)
-           .select { |name| SUPPORTED_EXTENSIONS.include?(File.extname(name).downcase) && folder.join(name).file? }
-           .sort_by(&:downcase)
-      rescue Errno::ENOENT
-        []
+      @image_filenames[cache_key] ||= scan_image_filenames(safe_folder, limit: limit)
+    end
+
+    def scan_image_filenames(folder, limit:)
+      names = []
+      path = folder_path(folder)
+      Dir.each_child(path) do |name|
+        next unless SUPPORTED_EXTENSIONS.include?(File.extname(name).downcase)
+        next unless path.join(name).file?
+
+        names << name
+        break if limit && names.length >= limit
       end
+      names.sort_by(&:downcase)
+    rescue Errno::ENOENT
+      []
+    end
+
+    def bounded_image_count(folder, limit: 1_000)
+      safe_folder = assert_safe_name(folder, "folder")
+      @image_counts ||= {}
+      @image_counts[[safe_folder, limit]] ||= begin
+        count = 0
+        path = folder_path(safe_folder)
+        Dir.each_child(path) do |name|
+          next unless SUPPORTED_EXTENSIONS.include?(File.extname(name).downcase)
+          next unless path.join(name).file?
+
+          count += 1
+          break if count > limit
+        end
+        count
+      rescue Errno::ENOENT
+        0
+      end
+    end
+
+    def image_count_label(folder)
+      count = bounded_image_count(folder)
+      count > 1_000 ? "1000+" : count.to_s
+    end
+
+    def folder_has_images?(folder)
+      bounded_image_count(folder, limit: 1).positive?
     end
 
     def image_record_for_name(folder, name)

@@ -7,7 +7,7 @@ class ImagesController < ApplicationController
   end
 
   def destroy
-    library.delete_image(params.require(:folder), params[:name])
+    library.delete_image(params.require(:folder), requested_image_name)
     redirect_to root_path, notice: "Image deleted"
   rescue StandardError => e
     redirect_to root_path, alert: e.message
@@ -41,6 +41,14 @@ class ImagesController < ApplicationController
   end
 
   private
+
+  def requested_image_name
+    name = params[:name].to_s
+    format = params[:format].to_s
+    return name if format.blank? || File.extname(name).present?
+
+    "#{name}.#{format}"
+  end
 
   def library
     @library ||= Speculum::ImageLibrary.new(Speculum::Settings.load)

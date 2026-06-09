@@ -42,7 +42,7 @@
     <header class="topbar">
       <div>
         <h1>Display Console</h1>
-        <p><%= @image_page[:total] %> images in <%= @selected_folder %></p>
+        <p><%= @image_page[:total_label] %> images in <%= @selected_folder %></p>
       </div>
 
       <div class="control-strip">
@@ -115,7 +115,7 @@
                 <small><%= number_to_human_size(image[:bytes]) %></small>
               </div>
               <%= button_to "Next", queue_images_path(folder: image[:folder], name: image[:name]), class: "secondary-action compact-action" %>
-              <%= button_to "Delete", image_path(image[:name], folder: image[:folder]), method: :delete, class: "danger-link", form: { data: { turbo_confirm: "Delete #{image[:name]}?" } } %>
+              <%= button_to "Delete", delete_image_path(folder: image[:folder], name: image[:name]), method: :delete, class: "danger-link", form: { data: { turbo_confirm: "Delete #{image[:name]}?" } } %>
             </div>
           <% end %>
           <% if @images.empty? %>
@@ -123,7 +123,7 @@
           <% end %>
         </div>
 
-        <% if @image_page[:total_pages] > 1 %>
+        <% if @image_page[:page] > 1 || @image_page[:has_next] %>
           <nav class="pagination">
             <% previous_page = @image_page[:page] - 1 %>
             <% next_page = @image_page[:page] + 1 %>
@@ -132,8 +132,8 @@
             <% else %>
               <span class="disabled-action">Previous</span>
             <% end %>
-            <span>Page <%= @image_page[:page] %> of <%= @image_page[:total_pages] %></span>
-            <% if next_page <= @image_page[:total_pages] %>
+            <span>Page <%= @image_page[:page] %></span>
+            <% if @image_page[:has_next] %>
               <%= link_to "Next", root_path(page: next_page), class: "secondary-action compact-action" %>
             <% else %>
               <span class="disabled-action">Next</span>
