@@ -230,6 +230,7 @@ select {
 .danger-action,
 .text-action,
 .danger-link,
+.compact-action,
 .folder-tools input[type="submit"],
 .compact-form input[type="submit"] {
   border: 0;
@@ -238,6 +239,12 @@ select {
   font-weight: 800;
   min-height: 40px;
   padding: 0 14px;
+}
+
+.compact-action {
+  min-height: 34px;
+  padding: 0 10px;
+  text-decoration: none;
 }
 
 .primary-action {
@@ -359,6 +366,7 @@ select {
 
 .folder-tools {
   border-bottom: 1px solid #e5e9e2;
+  flex-wrap: wrap;
   margin-bottom: 10px;
   padding-bottom: 14px;
 }
@@ -399,6 +407,26 @@ select {
 
 .image-row strong {
   overflow-wrap: anywhere;
+}
+
+.pagination {
+  align-items: center;
+  border-top: 1px solid #eef1ec;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 14px;
+}
+
+.disabled-action {
+  align-items: center;
+  background: #eef1ec;
+  border-radius: 6px;
+  color: #8b958d;
+  display: inline-flex;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 .field-row {

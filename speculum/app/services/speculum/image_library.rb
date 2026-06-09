@@ -36,6 +36,20 @@ module Speculum
       []
     end
 
+    def images_page(folder, page:, per_page:)
+      page = [page.to_i, 1].max
+      per_page = [per_page.to_i, 1].max
+      all = images(folder)
+      offset = (page - 1) * per_page
+      {
+        records: all.slice(offset, per_page) || [],
+        total: all.length,
+        page: page,
+        per_page: per_page,
+        total_pages: [(all.length.to_f / per_page).ceil, 1].max
+      }
+    end
+
     def image_path(folder, name)
       safe_folder = assert_safe_name(folder, "folder")
       safe_name = assert_safe_filename(name)
@@ -60,6 +74,12 @@ module Speculum
       FileUtils.rm(image_path(folder, name))
     end
 
+    def queue_image(folder, name)
+      path = image_path(folder, name)
+      FileUtils.mkdir_p(Paths.runtime_root)
+      Paths.queue_file.write(path.basename.to_s)
+    end
+
     def create_folder(name)
       FileUtils.mkdir_p(folder_path(assert_safe_name(name, "folder")))
     end
@@ -74,11 +94,14 @@ module Speculum
     end
 
     def delete_folder(name)
-      path = folder_path(assert_safe_name(name, "folder"))
-      raise "Folder not found" unless path.directory?
-      raise "Delete images first before removing a folder" unless images(name).empty?
+      safe_name = assert_safe_name(name, "folder")
+      raise "Folder is not managed by Speculum" unless ordered_folder_names.include?(safe_name)
 
-      FileUtils.rmdir(path)
+      path = folder_path(safe_name).expand_path
+      raise "Folder is outside the project image area" unless path.to_s.start_with?(Paths.project_root.expand_path.to_s + File::SEPARATOR)
+      raise "Folder not found" unless path.directory?
+
+      FileUtils.rm_rf(path)
     end
 
     def selected_image_path
@@ -109,7 +132,8 @@ module Speculum
         name: path.basename.to_s,
         folder: folder,
         bytes: path.size,
-        url: Rails.application.routes.url_helpers.show_file_images_path(folder: folder, name: path.basename.to_s)
+        url: Rails.application.routes.url_helpers.show_file_images_path(folder: folder, name: path.basename.to_s),
+        thumbnail_url: Rails.application.routes.url_helpers.thumbnail_images_path(folder: folder, name: path.basename.to_s)
       }
     end
 

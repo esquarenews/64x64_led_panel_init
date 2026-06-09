@@ -53,7 +53,8 @@ module Speculum
     def preview(library, settings)
       image_names = library.images(settings["selected_folder"]).map { |image| image[:name] }
       current = current_image_name(image_names) || image_names.first
-      next_image = next_image_name(image_names, current)
+      queued = queued_image_name(image_names)
+      next_image = queued || next_image_name(image_names, current)
       {
         current: current && library.images(settings["selected_folder"]).find { |image| image[:name] == current },
         next: next_image && library.images(settings["selected_folder"]).find { |image| image[:name] == next_image }
@@ -86,6 +87,13 @@ module Speculum
 
       index = image_names.index(current) || -1
       image_names[(index + 1) % image_names.length]
+    end
+
+    def queued_image_name(image_names)
+      return unless Paths.queue_file.exist?
+
+      name = Paths.queue_file.read.strip
+      image_names.include?(name) ? name : nil
     end
   end
 end

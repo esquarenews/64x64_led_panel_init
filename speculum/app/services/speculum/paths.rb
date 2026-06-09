@@ -26,6 +26,14 @@ module Speculum
       runtime_root.join("single_image")
     end
 
+    def thumbnail_root
+      storage_root.join("thumbnails")
+    end
+
+    def queue_file
+      runtime_root.join("next_image.txt")
+    end
+
     def pidfile
       runtime_root.join("speculum.pid")
     end

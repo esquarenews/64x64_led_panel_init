@@ -21,6 +21,7 @@ class PlayerCommandTest < ActiveSupport::TestCase
     assert_includes argv, "--hard-reset"
     assert_includes argv, "--no-overlay"
     assert_includes argv, "--no-calendar"
+    assert_includes argv, "--queue-file"
   end
 
   test "single image mode creates a runtime directory with only the chosen image" do
@@ -47,6 +48,7 @@ class PlayerCommandTest < ActiveSupport::TestCase
                 assert_equal storage_root.join("runtime/single_image"), command.image_source_dir
                 assert_path_exists storage_root.join("runtime/single_image/panel.png")
                 assert_includes command.argv, "--single"
+                assert_not_includes command.argv, "--queue-file"
               end
             end
           end

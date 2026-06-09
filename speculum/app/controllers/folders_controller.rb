@@ -18,6 +18,11 @@ class FoldersController < ApplicationController
 
   def destroy
     library.delete_folder(params[:id])
+    settings = Speculum::Settings.load
+    remaining = Speculum::ImageLibrary.new(settings).ordered_folder_names
+    settings["folder_order"] = remaining
+    settings["selected_folder"] = remaining.first if settings["selected_folder"] == params[:id]
+    Speculum::Settings.save(settings)
     redirect_to root_path, notice: "Folder deleted"
   rescue StandardError => e
     redirect_to root_path, alert: e.message

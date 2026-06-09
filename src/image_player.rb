@@ -1769,6 +1769,26 @@ rescue Errno::ENOENT
   []
 end
 
+def queued_image_path(queue_file, image_dir)
+  return nil if queue_file.nil? || queue_file.empty? || !File.file?(queue_file)
+
+  queued_name = File.read(queue_file).strip
+  FileUtils.rm_f(queue_file)
+  return nil if queued_name.empty?
+
+  safe_name = File.basename(queued_name)
+  path = File.expand_path(safe_name, image_dir)
+  dir = File.expand_path(image_dir)
+  return nil unless path.start_with?(dir + File::SEPARATOR)
+  return nil unless SUPPORTED_EXTENSIONS.include?(File.extname(path).downcase)
+  return nil unless File.file?(path)
+
+  path
+rescue StandardError => e
+  warn "Failed to consume queued image: #{e.class}: #{e.message}"
+  nil
+end
+
 def wait_for(transport, expected, timeout:, optional: false)
   expectations = Array(expected).map(&:to_s)
   loop do
@@ -1801,7 +1821,8 @@ options = {
   test_pattern: false,
   static_test: false,
   single: false,
-  hard_reset: false
+  hard_reset: false,
+  queue_file: nil
 }
 
 OptionParser.new do |opts|
@@ -1815,6 +1836,9 @@ OptionParser.new do |opts|
   opts.on('--ble-address ADDR', 'BLE address override') { |value| options[:ble_address] = value }
   opts.on('-d', '--dir PATH', 'Directory containing source images (default: ../IMG)') do |value|
     options[:image_dir] = File.expand_path(value)
+  end
+  opts.on('--queue-file PATH', 'File containing a one-shot next image filename') do |value|
+    options[:queue_file] = File.expand_path(value)
   end
   opts.on('--dwell SECONDS', Integer, "Seconds to display each image (default: #{options[:dwell]})") do |value|
     options[:dwell] = value if value.positive?
@@ -1993,7 +2017,10 @@ loop do
     next
   end
 
-  image_paths.each do |image_path|
+  queued_path = queued_image_path(options[:queue_file], options[:image_dir])
+  paths_for_cycle = queued_path ? [queued_path] + image_paths.reject { |path| path == queued_path } : image_paths
+
+  paths_for_cycle.each do |image_path|
     begin
       overlay_text = nil
       if options[:overlay]

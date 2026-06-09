@@ -19,6 +19,8 @@ Rails.application.routes.draw do
   resources :images, only: %i[create destroy], param: :name do
     collection do
       get :show_file
+      get :thumbnail
+      post :queue
     end
   end
 end

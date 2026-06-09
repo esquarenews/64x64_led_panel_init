@@ -14,7 +14,9 @@ class ImageLibraryTest < ActiveSupport::TestCase
         library = Speculum::ImageLibrary.new("selected_folder" => "IMG", "folder_order" => [])
 
         assert_equal ["IMG"], library.ordered_folder_names
-        assert_equal ["a.jpg", "b.png"], library.images("IMG").map { |image| image[:name] }
+        images = library.images("IMG")
+        assert_equal ["a.jpg", "b.png"], images.map { |image| image[:name] }
+        assert_includes images.first[:thumbnail_url], "/images/thumbnail"
       end
     end
   end
@@ -28,6 +30,76 @@ class ImageLibraryTest < ActiveSupport::TestCase
         library = Speculum::ImageLibrary.new("selected_folder" => "IMG")
 
         assert_raises(RuntimeError) { library.image_path("IMG", "../secret.png") }
+      end
+    end
+  end
+
+  test "queues an image by filename for the sender" do
+    Dir.mktmpdir do |project_dir|
+      Dir.mktmpdir do |runtime_dir|
+        project_root = Pathname.new(project_dir)
+        runtime_root = Pathname.new(runtime_dir)
+        FileUtils.mkdir_p(project_root.join("IMG"))
+        project_root.join("IMG/queued.png").write("image")
+
+        stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+          stub_singleton_method(Speculum::Paths, :runtime_root, runtime_root) do
+            stub_singleton_method(Speculum::Paths, :queue_file, runtime_root.join("next_image.txt")) do
+              library = Speculum::ImageLibrary.new("selected_folder" => "IMG")
+              library.queue_image("IMG", "queued.png")
+
+              assert_equal "queued.png", runtime_root.join("next_image.txt").read
+            end
+          end
+        end
+      end
+    end
+  end
+
+  test "paginates image records to keep dashboard load bounded" do
+    Dir.mktmpdir do |project_dir|
+      project_root = Pathname.new(project_dir)
+      FileUtils.mkdir_p(project_root.join("IMG"))
+      5.times { |index| project_root.join("IMG/#{index}.png").write("image") }
+
+      stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+        library = Speculum::ImageLibrary.new("selected_folder" => "IMG")
+        page = library.images_page("IMG", page: 2, per_page: 2)
+
+        assert_equal 5, page[:total]
+        assert_equal 3, page[:total_pages]
+        assert_equal 2, page[:records].length
+        assert_equal ["2.png", "3.png"], page[:records].map { |image| image[:name] }
+      end
+    end
+  end
+
+  test "removes a folder and its images" do
+    Dir.mktmpdir do |project_dir|
+      project_root = Pathname.new(project_dir)
+      FileUtils.mkdir_p(project_root.join("IMG/remove-me"))
+      FileUtils.mkdir_p(project_root.join("IMG-old"))
+      project_root.join("IMG-old/photo.png").write("image")
+
+      stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+        library = Speculum::ImageLibrary.new("selected_folder" => "IMG-old")
+        library.delete_folder("IMG-old")
+
+        assert_not project_root.join("IMG-old").exist?
+      end
+    end
+  end
+
+  test "does not remove unmanaged project folders" do
+    Dir.mktmpdir do |project_dir|
+      project_root = Pathname.new(project_dir)
+      FileUtils.mkdir_p(project_root.join("speculum"))
+
+      stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+        library = Speculum::ImageLibrary.new("selected_folder" => "speculum")
+
+        assert_raises(RuntimeError) { library.delete_folder("speculum") }
+        assert_path_exists project_root.join("speculum")
       end
     end
   end

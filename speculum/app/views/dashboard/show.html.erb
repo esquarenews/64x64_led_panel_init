@@ -42,7 +42,7 @@
     <header class="topbar">
       <div>
         <h1>Display Console</h1>
-        <p><%= @images.count %> images in <%= @selected_folder %></p>
+        <p><%= @image_page[:total] %> images in <%= @selected_folder %></p>
       </div>
 
       <div class="control-strip">
@@ -63,7 +63,7 @@
           <strong><%= @preview[:current]&.dig(:name) || "Waiting" %></strong>
         </div>
         <% if @preview[:current] %>
-          <%= image_tag @preview[:current][:url], alt: @preview[:current][:name] %>
+          <%= image_tag @preview[:current][:thumbnail_url], alt: @preview[:current][:name] %>
         <% else %>
           <div class="empty-preview">No image</div>
         <% end %>
@@ -75,7 +75,7 @@
           <strong><%= @preview[:next]&.dig(:name) || "Waiting" %></strong>
         </div>
         <% if @preview[:next] %>
-          <%= image_tag @preview[:next][:url], alt: @preview[:next][:name] %>
+          <%= image_tag @preview[:next][:thumbnail_url], alt: @preview[:next][:name] %>
         <% else %>
           <div class="empty-preview">No image</div>
         <% end %>
@@ -103,16 +103,18 @@
           <% end %>
           <%= button_to "Move up", move_up_folder_path(@selected_folder), class: "text-action" %>
           <%= button_to "Move down", move_down_folder_path(@selected_folder), class: "text-action" %>
+          <%= button_to "Remove folder", folder_path(@selected_folder), method: :delete, class: "danger-link", form: { data: { turbo_confirm: "Remove #{@selected_folder} and all images inside it?" } } %>
         </div>
 
         <div class="image-table">
           <% @images.each do |image| %>
             <div class="image-row">
-              <%= image_tag image[:url], alt: image[:name] %>
+              <%= image_tag image[:thumbnail_url], alt: image[:name], loading: "lazy" %>
               <div>
                 <strong><%= image[:name] %></strong>
                 <small><%= number_to_human_size(image[:bytes]) %></small>
               </div>
+              <%= button_to "Next", queue_images_path(folder: image[:folder], name: image[:name]), class: "secondary-action compact-action" %>
               <%= button_to "Delete", image_path(image[:name], folder: image[:folder]), method: :delete, class: "danger-link", form: { data: { turbo_confirm: "Delete #{image[:name]}?" } } %>
             </div>
           <% end %>
@@ -120,6 +122,24 @@
             <div class="empty-state">No images in this folder yet.</div>
           <% end %>
         </div>
+
+        <% if @image_page[:total_pages] > 1 %>
+          <nav class="pagination">
+            <% previous_page = @image_page[:page] - 1 %>
+            <% next_page = @image_page[:page] + 1 %>
+            <% if previous_page.positive? %>
+              <%= link_to "Previous", root_path(page: previous_page), class: "secondary-action compact-action" %>
+            <% else %>
+              <span class="disabled-action">Previous</span>
+            <% end %>
+            <span>Page <%= @image_page[:page] %> of <%= @image_page[:total_pages] %></span>
+            <% if next_page <= @image_page[:total_pages] %>
+              <%= link_to "Next", root_path(page: next_page), class: "secondary-action compact-action" %>
+            <% else %>
+              <span class="disabled-action">Next</span>
+            <% end %>
+          </nav>
+        <% end %>
       </article>
 
       <aside class="settings-panel">
@@ -137,7 +157,7 @@
           </label>
 
           <label>Single image
-            <%= form.select :selected_image, @images.map { |image| [image[:name], image[:name]] }, { include_blank: "First image", selected: @settings["selected_image"] } %>
+            <%= form.select :selected_image, @all_images.map { |image| [image[:name], image[:name]] }, { include_blank: "First image", selected: @settings["selected_image"] } %>
           </label>
 
           <label>Transport

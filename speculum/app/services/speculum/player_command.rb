@@ -42,6 +42,7 @@ module Speculum
       end
 
       args.concat(["--dir", image_source_dir.to_s])
+      args.concat(["--queue-file", Paths.queue_file.to_s]) if settings["mode"] != "single"
       add_value_flags(args)
       add_boolean_flags(args)
       args << "--single" if settings["mode"] == "single"

@@ -1,11 +1,15 @@
 class DashboardController < ApplicationController
+  IMAGES_PER_PAGE = 18
+
   def show
     @settings = Speculum::Settings.load
     @library = Speculum::ImageLibrary.new(@settings)
     @player = Speculum::ProcessManager.new
     @folders = @library.folders
     @selected_folder = @settings["selected_folder"]
-    @images = @library.images(@selected_folder)
+    @all_images = @library.images(@selected_folder)
+    @image_page = @library.images_page(@selected_folder, page: params[:page], per_page: IMAGES_PER_PAGE)
+    @images = @image_page[:records]
     @preview = @player.preview(@library, @settings)
     @ports = Speculum::PortScanner.candidates
   end
