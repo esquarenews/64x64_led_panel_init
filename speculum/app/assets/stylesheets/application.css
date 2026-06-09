@@ -46,6 +46,16 @@ select {
   width: 100%;
 }
 
+.login-logo {
+  background: #000000;
+  border-radius: 8px;
+  display: block;
+  height: 92px;
+  margin-bottom: 18px;
+  object-fit: cover;
+  width: 92px;
+}
+
 .product-mark {
   color: #718257;
   font-weight: 800;
@@ -143,11 +153,12 @@ select {
   gap: 12px;
 }
 
-.brand-icon {
-  background: linear-gradient(135deg, #e9ff73, #48b28b);
+.brand-logo {
+  background: #000000;
   border-radius: 6px;
-  height: 34px;
-  width: 34px;
+  height: 38px;
+  object-fit: cover;
+  width: 38px;
 }
 
 .brand-block p {

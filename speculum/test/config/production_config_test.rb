@@ -43,4 +43,17 @@ class ProductionConfigTest < ActiveSupport::TestCase
     assert_includes Rails.root.join("app/views/layouts/application.html.erb").read, 'stylesheet_link_tag "application"'
     assert_not_includes Rails.root.join("app/views/layouts/application.html.erb").read, "stylesheet_link_tag :app"
   end
+
+  test "logo assets are wired for branding and favicon" do
+    layout = Rails.root.join("app/views/layouts/application.html.erb").read
+    dashboard = Rails.root.join("app/views/dashboard/show.html.erb").read
+    login = Rails.root.join("app/views/sessions/new.html.erb").read
+
+    assert_path_exists Rails.root.join("app/assets/images/speculum-logo.png")
+    assert_path_exists Rails.root.join("public/icon.png")
+    assert_includes layout, 'href="/icon.png"'
+    assert_not_includes layout, 'href="/icon.svg"'
+    assert_includes dashboard, "speculum-logo.png"
+    assert_includes login, "speculum-logo.png"
+  end
 end
