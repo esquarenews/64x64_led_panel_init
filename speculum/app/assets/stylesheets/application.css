@@ -384,6 +384,10 @@ input[type="submit"].is-submitting {
   white-space: nowrap;
 }
 
+.preview-timer.pending {
+  color: #9aa39a;
+}
+
 .preview-pane img,
 .empty-preview {
   aspect-ratio: 2 / 3;

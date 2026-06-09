@@ -63,6 +63,8 @@
             <span>Current</span>
             <% if @preview[:timer] %>
               <small class="preview-timer" data-countdown-prefix="Changes in" data-countdown-started-at="<%= @preview[:timer][:started_at] %>" data-countdown-duration="<%= @preview[:timer][:duration] %>">Changes in --:--</small>
+            <% else %>
+              <small class="preview-timer pending">Timer pending</small>
             <% end %>
           </div>
           <strong><%= @preview[:current]&.dig(:name) || "Waiting" %></strong>
@@ -80,6 +82,8 @@
             <span>Next</span>
             <% if @preview[:timer] %>
               <small class="preview-timer" data-countdown-prefix="Up in" data-countdown-started-at="<%= @preview[:timer][:started_at] %>" data-countdown-duration="<%= @preview[:timer][:duration] %>">Up in --:--</small>
+            <% else %>
+              <small class="preview-timer pending">Timer pending</small>
             <% end %>
           </div>
           <strong><%= @preview[:next]&.dig(:name) || "Waiting" %></strong>
