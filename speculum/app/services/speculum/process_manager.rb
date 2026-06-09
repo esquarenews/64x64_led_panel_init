@@ -1,3 +1,5 @@
+require "json"
+
 module Speculum
   class ProcessManager
     def running?
@@ -23,6 +25,7 @@ module Speculum
       raise "Speculum is already running" if running?
 
       FileUtils.mkdir_p(Paths.runtime_root)
+      FileUtils.rm_f(Paths.state_file)
       command = PlayerCommand.new(settings).argv
       log = File.open(Paths.logfile, "a")
       log.sync = true
@@ -52,6 +55,15 @@ module Speculum
 
     def preview(library, settings)
       folder = settings["selected_folder"]
+      if (state = player_state)
+        current = state["current"]
+        next_image = queued_image_name.presence || state["next"]
+        return {
+          current: current && library.image_record_for(folder, current),
+          next: next_image && library.image_record_for(folder, next_image)
+        }
+      end
+
       current = current_image_name
       current_record = current && library.image_record_for(folder, current)
       current = nil unless current_record
@@ -70,6 +82,17 @@ module Speculum
     end
 
     private
+
+    def player_state
+      return unless Paths.state_file.exist?
+
+      state = JSON.parse(Paths.state_file.read)
+      return unless state.is_a?(Hash)
+
+      state
+    rescue JSON::ParserError, Errno::ENOENT
+      nil
+    end
 
     def wait_for_exit
       20.times do

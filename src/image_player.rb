@@ -9,6 +9,7 @@ require 'base64'
 require 'tempfile'
 require 'uri'
 require 'date'
+require 'time'
 
 begin
   require 'serialport'
@@ -1822,7 +1823,8 @@ options = {
   static_test: false,
   single: false,
   hard_reset: false,
-  queue_file: nil
+  queue_file: nil,
+  state_file: nil
 }
 
 OptionParser.new do |opts|
@@ -1839,6 +1841,9 @@ OptionParser.new do |opts|
   end
   opts.on('--queue-file PATH', 'File containing a one-shot next image filename') do |value|
     options[:queue_file] = File.expand_path(value)
+  end
+  opts.on('--state-file PATH', 'File receiving current/next image state') do |value|
+    options[:state_file] = File.expand_path(value)
   end
   opts.on('--dwell SECONDS', Integer, "Seconds to display each image (default: #{options[:dwell]})") do |value|
     options[:dwell] = value if value.positive?
@@ -1942,6 +1947,32 @@ def wait_for_ready(transport, options)
   transport
 end
 
+def write_player_state(state_file, current:, next_image:)
+  return if state_file.nil? || state_file.empty?
+
+  FileUtils.mkdir_p(File.dirname(state_file))
+  temp = "#{state_file}.tmp"
+  payload = {
+    current: current && File.basename(current),
+    next: next_image && File.basename(next_image),
+    updated_at: Time.now.utc.iso8601
+  }
+  File.write(temp, JSON.generate(payload))
+  FileUtils.mv(temp, state_file)
+rescue StandardError => e
+  warn "Failed to write player state: #{e.class}: #{e.message}"
+end
+
+def next_cycle_image(paths, current_path)
+  return nil if paths.empty?
+  return paths.first unless current_path
+
+  index = paths.index(current_path)
+  return paths.first unless index
+
+  paths[(index + 1) % paths.length]
+end
+
 transport = ensure_transport(nil, options)
 begin
   transport = wait_for_ready(transport, options)
@@ -2008,82 +2039,97 @@ if options[:static_test]
   end
 end
 
+cycle_index = 0
+
 loop do
-  image_paths = discover_images(options[:image_dir])
+  begin
+    image_paths = discover_images(options[:image_dir])
 
-  if image_paths.empty?
-    warn "No images found in #{options[:image_dir]}. Rechecking in #{options[:poll]}s..."
-    sleep options[:poll]
-    next
-  end
+    if image_paths.empty?
+      write_player_state(options[:state_file], current: nil, next_image: nil)
+      warn "No images found in #{options[:image_dir]}. Rechecking in #{options[:poll]}s..."
+      sleep options[:poll]
+      next
+    end
 
-  queued_path = queued_image_path(options[:queue_file], options[:image_dir])
-  paths_for_cycle = queued_path ? [queued_path] + image_paths.reject { |path| path == queued_path } : image_paths
+    queued_path = queued_image_path(options[:queue_file], options[:image_dir])
+    if queued_path
+      image_path = queued_path
+      cycle_index = image_paths.index(queued_path) || cycle_index
+    else
+      cycle_index = 0 if cycle_index >= image_paths.length
+      image_path = image_paths[cycle_index]
+    end
 
-  paths_for_cycle.each do |image_path|
-    begin
-      overlay_text = nil
-      if options[:overlay]
-        lines = []
-        weather = fetch_melbourne_weather
-        lines << (weather || 'weather n/a')
-        lines << calendar_message if options[:calendar]
-        overlay_text = lines.join("\n") unless lines.empty?
-      end
+    next_image = next_cycle_image(image_paths, image_path)
 
-      if overlay_text && defined?(MiniMagick) && MiniMagick.nil? && !defined?(@warned_no_overlay)
-        warn 'mini_magick is not available; overlay text will be rendered with chunky_png (sips fallback).'
-        @warned_no_overlay = true
-      end
+    overlay_text = nil
+    if options[:overlay]
+      lines = []
+      weather = fetch_melbourne_weather
+      lines << (weather || 'weather n/a')
+      lines << calendar_message if options[:calendar]
+      overlay_text = lines.join("\n") unless lines.empty?
+    end
 
-      payload = prepare_payload(
-        image_path,
-        DISPLAY_WIDTH,
-        DISPLAY_HEIGHT,
-        blur: options[:blur],
-        sharpen: options[:sharpen],
-        dither: options[:dither],
-        color_correct: options[:color_correct],
-        overlay_text: overlay_text
-      )
-      next unless payload
+    if overlay_text && defined?(MiniMagick) && MiniMagick.nil? && !defined?(@warned_no_overlay)
+      warn 'mini_magick is not available; overlay text will be rendered with chunky_png (sips fallback).'
+      @warned_no_overlay = true
+    end
 
-      puts "Sending #{File.basename(image_path)}..."
-      send_frame(transport, DISPLAY_WIDTH, DISPLAY_HEIGHT, payload)
-      wait_for(transport, 'OK', timeout: 20)
+    payload = prepare_payload(
+      image_path,
+      DISPLAY_WIDTH,
+      DISPLAY_HEIGHT,
+      blur: options[:blur],
+      sharpen: options[:sharpen],
+      dither: options[:dither],
+      color_correct: options[:color_correct],
+      overlay_text: overlay_text
+    )
+    unless payload
+      cycle_index = (image_paths.index(image_path) || cycle_index) + 1
+      next
+    end
 
-      acknowledgement =
-        if frames_sent.zero?
-          wait_for(transport, %w[SHOW DONE], timeout: 20)
-        else
-          wait_for(transport, 'DONE', timeout: 20)
-        end
+    puts "Sending #{File.basename(image_path)}..."
+    send_frame(transport, DISPLAY_WIDTH, DISPLAY_HEIGHT, payload)
+    wait_for(transport, 'OK', timeout: 20)
 
-      frames_sent += 1
-
-      if options[:single]
-        puts 'Single image mode enabled; holding current image and exiting.'
-        exit 0
-      end
-
-      if options[:manual]
-        puts "Received #{acknowledgement}. Press Enter to display the next image (Ctrl+C to quit)..."
-        $stdin.gets
+    acknowledgement =
+      if frames_sent.zero?
+        wait_for(transport, %w[SHOW DONE], timeout: 20)
       else
-        puts "Displaying #{File.basename(image_path)} for #{options[:dwell]} seconds..."
-        sleep options[:dwell]
+        wait_for(transport, 'DONE', timeout: 20)
       end
-    rescue StandardError => e
-      warn "Transport error: #{e.message}. Attempting reconnect..."
-      transport = ensure_transport(nil, options)
-      begin
-        transport = wait_for_ready(transport, options)
-      rescue StandardError => inner_e
-        warn "Reconnect failed: #{inner_e.message}. Retrying in #{BLE_RECONNECT_DELAY}s..."
-        sleep BLE_RECONNECT_DELAY
-        retry
-      end
+
+    frames_sent += 1
+    write_player_state(options[:state_file], current: image_path, next_image: next_image)
+
+    if options[:single]
+      puts 'Single image mode enabled; holding current image and exiting.'
+      exit 0
+    end
+
+    if options[:manual]
+      puts "Received #{acknowledgement}. Press Enter to display the next image (Ctrl+C to quit)..."
+      $stdin.gets
+    else
+      puts "Displaying #{File.basename(image_path)} for #{options[:dwell]} seconds..."
+      sleep options[:dwell]
+    end
+
+    cycle_index = (image_paths.index(image_path) || cycle_index) + 1
+  rescue StandardError => e
+    warn "Transport error: #{e.message}. Attempting reconnect..."
+    transport = ensure_transport(nil, options)
+    begin
+      transport = wait_for_ready(transport, options)
+    rescue StandardError => inner_e
+      warn "Reconnect failed: #{inner_e.message}. Retrying in #{BLE_RECONNECT_DELAY}s..."
+      sleep BLE_RECONNECT_DELAY
       retry
     end
+    retry
   end
 end

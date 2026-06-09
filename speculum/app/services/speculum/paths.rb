@@ -34,6 +34,10 @@ module Speculum
       runtime_root.join("next_image.txt")
     end
 
+    def state_file
+      runtime_root.join("player_state.json")
+    end
+
     def pidfile
       runtime_root.join("speculum.pid")
     end
