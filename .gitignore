@@ -3,3 +3,10 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Server-only display image libraries. UI graphics live under app/public
+# paths such as speculum/public and should stay tracked.
+/IMG*/
+/img-alt/
+/images/
+/Images/
