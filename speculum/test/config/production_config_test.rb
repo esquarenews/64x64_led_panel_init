@@ -44,6 +44,34 @@ class ProductionConfigTest < ActiveSupport::TestCase
     assert_not_includes Rails.root.join("app/views/layouts/application.html.erb").read, "stylesheet_link_tag :app"
   end
 
+  test "production resolves loading indicator assets" do
+    script = <<~RUBY
+      require_relative "config/environment"
+      helper = ActionController::Base.helpers
+      path = helper.javascript_path("application")
+      abort path unless path.include?("/assets/application-") && path.end_with?(".js")
+    RUBY
+
+    env = {
+      "RAILS_ENV" => "production",
+      "SECRET_KEY_BASE_DUMMY" => "1",
+      "SPECULUM_USERNAME" => "admin",
+      "SPECULUM_PASSWORD" => "speculum"
+    }
+
+    _stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, "-e", script, chdir: Rails.root)
+
+    layout = Rails.root.join("app/views/layouts/application.html.erb").read
+    javascript = Rails.root.join("app/assets/javascripts/application.js").read
+    stylesheet = Rails.root.join("app/assets/stylesheets/application.css").read
+
+    assert status.success?, stderr
+    assert_includes layout, 'javascript_include_tag "application"'
+    assert_includes javascript, "form.classList.add(\"is-submitting\")"
+    assert_includes javascript, "Deleting..."
+    assert_includes stylesheet, "button.is-submitting"
+  end
+
   test "logo assets are wired for branding and favicon" do
     layout = Rails.root.join("app/views/layouts/application.html.erb").read
     dashboard = Rails.root.join("app/views/dashboard/show.html.erb").read

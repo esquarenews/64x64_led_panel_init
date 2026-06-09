@@ -157,7 +157,7 @@
           </label>
 
           <label>Single image
-            <%= form.select :selected_image, @all_images.map { |image| [image[:name], image[:name]] }, { include_blank: "First image", selected: @settings["selected_image"] } %>
+            <%= form.text_field :selected_image, value: @settings["selected_image"], placeholder: "Optional exact filename" %>
           </label>
 
           <label>Transport

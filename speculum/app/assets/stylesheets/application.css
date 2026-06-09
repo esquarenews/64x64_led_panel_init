@@ -274,6 +274,23 @@ select {
   color: #7f241c;
 }
 
+form.is-submitting {
+  cursor: progress;
+}
+
+button.is-submitting,
+input[type="submit"].is-submitting,
+form.is-submitting button[type="submit"],
+form.is-submitting input[type="submit"] {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+button.is-submitting,
+input[type="submit"].is-submitting {
+  min-width: 104px;
+}
+
 .text-action {
   background: transparent;
   color: #aab4ad;

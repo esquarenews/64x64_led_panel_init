@@ -7,7 +7,6 @@ class DashboardController < ApplicationController
     @player = Speculum::ProcessManager.new
     @folders = @library.folders
     @selected_folder = @settings["selected_folder"]
-    @all_images = @library.images(@selected_folder)
     @image_page = @library.images_page(@selected_folder, page: params[:page], per_page: IMAGES_PER_PAGE)
     @images = @image_page[:records]
     @preview = @player.preview(@library, @settings)

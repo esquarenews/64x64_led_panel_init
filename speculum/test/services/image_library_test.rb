@@ -74,6 +74,22 @@ class ImageLibraryTest < ActiveSupport::TestCase
     end
   end
 
+  test "folder counts do not build full image records" do
+    Dir.mktmpdir do |project_dir|
+      project_root = Pathname.new(project_dir)
+      FileUtils.mkdir_p(project_root.join("IMG"))
+      3.times { |index| project_root.join("IMG/#{index}.png").write("image") }
+
+      stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+        library = Speculum::ImageLibrary.new("selected_folder" => "IMG")
+
+        assert_equal 3, library.image_count("IMG")
+        assert_equal ["0.png", "1.png", "2.png"], library.image_names("IMG")
+        assert_equal 3, library.folders.first[:count]
+      end
+    end
+  end
+
   test "removes a folder and its images" do
     Dir.mktmpdir do |project_dir|
       project_root = Pathname.new(project_dir)

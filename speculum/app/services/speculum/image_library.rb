@@ -15,7 +15,7 @@ module Speculum
       ordered_folder_names.map do |name|
         {
           name: name,
-          count: images(name).count,
+          count: image_count(name),
           selected: name == settings["selected_folder"]
         }
       end
@@ -28,26 +28,35 @@ module Speculum
     end
 
     def images(folder)
-      folder_path(folder).children
-                         .select { |path| path.file? && SUPPORTED_EXTENSIONS.include?(path.extname.downcase) }
-                         .sort_by { |path| path.basename.to_s.downcase }
-                         .map { |path| image_record(folder, path) }
-    rescue Errno::ENOENT
-      []
+      image_paths(folder).map { |path| image_record(folder, path) }
+    end
+
+    def image_names(folder)
+      image_paths(folder).map { |path| path.basename.to_s }
+    end
+
+    def image_count(folder)
+      image_paths(folder).length
     end
 
     def images_page(folder, page:, per_page:)
       page = [page.to_i, 1].max
       per_page = [per_page.to_i, 1].max
-      all = images(folder)
+      paths = image_paths(folder)
       offset = (page - 1) * per_page
       {
-        records: all.slice(offset, per_page) || [],
-        total: all.length,
+        records: (paths.slice(offset, per_page) || []).map { |path| image_record(folder, path) },
+        total: paths.length,
         page: page,
         per_page: per_page,
-        total_pages: [(all.length.to_f / per_page).ceil, 1].max
+        total_pages: [(paths.length.to_f / per_page).ceil, 1].max
       }
+    end
+
+    def image_record_for(folder, name)
+      image_record(folder, image_path(folder, name))
+    rescue StandardError
+      nil
     end
 
     def image_path(folder, name)
@@ -121,12 +130,20 @@ module Speculum
                       .select(&:directory?)
                       .map { |path| path.basename.to_s }
                       .select { |name| safe_name?(name) }
-                      .select { |name| name.start_with?("IMG") || images(name).any? }
+                      .select { |name| name.start_with?("IMG") || image_count(name).positive? }
                       .sort_by(&:downcase)
     end
 
     def folder_path(name)
       Speculum::Paths.project_root.join(name)
+    end
+
+    def image_paths(folder)
+      folder_path(folder).children
+                         .select { |path| path.file? && SUPPORTED_EXTENSIONS.include?(path.extname.downcase) }
+                         .sort_by { |path| path.basename.to_s.downcase }
+    rescue Errno::ENOENT
+      []
     end
 
     def image_record(folder, path)
