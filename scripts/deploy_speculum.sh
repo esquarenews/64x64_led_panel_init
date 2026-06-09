@@ -10,7 +10,9 @@ ENV_FILE="${ENV_FILE:-$ENV_DIR/speculum.env}"
 BRANCH="${BRANCH:-$(git -C "$REPO_DIR" branch --show-current 2>/dev/null || echo main)}"
 RAILS_ENV="${RAILS_ENV:-production}"
 BIND="${BIND:-0.0.0.0}"
-PORT="${PORT:-3000}"
+PORT="${PORT:-5000}"
+BUNDLE_BIN_DIR="${BUNDLE_BIN_DIR:-$(ruby -e 'puts Gem.user_dir' 2>/dev/null)/bin}"
+SERVICE_PATH="${SERVICE_PATH:-$BUNDLE_BIN_DIR:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
 INSTALL_SERVICE="${INSTALL_SERVICE:-1}"
 RUN_TESTS="${RUN_TESTS:-0}"
 ALLOW_DIRTY="${ALLOW_DIRTY:-0}"
@@ -70,10 +72,28 @@ ENV
     printf 'Initial Speculum login: %s / %s\n' "$SPECULUM_USERNAME" "$password"
   else
     printf 'Using existing %s\n' "$ENV_FILE"
+    update_runtime_env
     if [[ "$RESET_CREDENTIALS" == "1" ]]; then
       reset_credentials
     fi
   fi
+}
+
+update_runtime_env() {
+  local tmp
+  tmp="$(mktemp)"
+  "${SUDO[@]}" grep -v -E '^(RAILS_ENV|BIND|PORT|RAILS_SERVE_STATIC_FILES|SPECULUM_RUBY)=' "$ENV_FILE" >"$tmp" || true
+  cat >>"$tmp" <<ENV
+RAILS_ENV=$RAILS_ENV
+SPECULUM_RUBY=$(quote_for_env "$(command -v ruby)")
+BIND=$BIND
+PORT=$PORT
+RAILS_SERVE_STATIC_FILES=1
+ENV
+
+  "${SUDO[@]}" install -m 600 "$tmp" "$ENV_FILE"
+  rm -f "$tmp"
+  printf 'Updated runtime settings in %s\n' "$ENV_FILE"
 }
 
 reset_credentials() {
@@ -110,11 +130,14 @@ After=network.target
 Type=simple
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
-ExecStart=/bin/bash -lc 'exec bundle exec rails server -e "\${RAILS_ENV:-production}" -b "\${BIND:-0.0.0.0}" -p "\${PORT:-3000}"'
+Environment=PATH=$SERVICE_PATH
+ExecStart=/usr/bin/bash -lc 'exec bundle exec rails server -e "\${RAILS_ENV:-production}" -b "\${BIND:-0.0.0.0}" -p "\${PORT:-5000}"'
 Restart=always
 RestartSec=5
 TimeoutStopSec=20
 KillSignal=SIGTERM
+User=$(id -un)
+Group=$(id -gn)
 
 [Install]
 WantedBy=multi-user.target
