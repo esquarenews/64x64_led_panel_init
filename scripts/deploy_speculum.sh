@@ -13,6 +13,7 @@ BIND="${BIND:-0.0.0.0}"
 PORT="${PORT:-5000}"
 BUNDLE_BIN_DIR="${BUNDLE_BIN_DIR:-$(ruby -e 'puts Gem.user_dir' 2>/dev/null)/bin}"
 SERVICE_PATH="${SERVICE_PATH:-$BUNDLE_BIN_DIR:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+BASH_BIN="${BASH_BIN:-/bin/bash}"
 INSTALL_SERVICE="${INSTALL_SERVICE:-1}"
 RUN_TESTS="${RUN_TESTS:-0}"
 ALLOW_DIRTY="${ALLOW_DIRTY:-0}"
@@ -133,7 +134,7 @@ Type=simple
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
 Environment=PATH=$SERVICE_PATH
-ExecStart=/usr/bin/bash -lc 'exec bundle exec rails server -e "\${RAILS_ENV:-production}" -b "\${BIND:-0.0.0.0}" -p "\${PORT:-5000}"'
+ExecStart=$BASH_BIN -lc 'exec bundle exec rails server -e "\${RAILS_ENV:-production}" -b "\${BIND:-0.0.0.0}" -p "\${PORT:-5000}"'
 Restart=always
 RestartSec=5
 TimeoutStopSec=20
@@ -156,6 +157,7 @@ restart_service() {
     log "Restarting $SERVICE_NAME"
     "${SUDO[@]}" systemctl restart "$SERVICE_NAME"
     "${SUDO[@]}" systemctl --no-pager --lines=20 status "$SERVICE_NAME"
+    health_check
   else
     log "Starting app without systemd"
     cd "$APP_DIR"
@@ -163,10 +165,28 @@ restart_service() {
   fi
 }
 
+health_check() {
+  log "Checking local health endpoint"
+  local url="http://127.0.0.1:${PORT}/up"
+  for attempt in {1..20}; do
+    if curl --fail --silent --show-error --max-time 2 "$url" >/dev/null; then
+      printf 'Health check passed: %s\n' "$url"
+      return 0
+    fi
+    sleep 1
+  done
+
+  printf 'Health check failed: %s\n' "$url" >&2
+  "${SUDO[@]}" systemctl --no-pager --lines=80 status "$SERVICE_NAME" >&2 || true
+  "${SUDO[@]}" journalctl -u "$SERVICE_NAME" --since "10 minutes ago" --no-pager -o cat >&2 || true
+  return 1
+}
+
 require_command git
 require_command ruby
 require_command bundle
 require_command openssl
+require_command curl
 
 log "Deploying Speculum from $REPO_DIR"
 cd "$REPO_DIR"

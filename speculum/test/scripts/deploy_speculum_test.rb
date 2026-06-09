@@ -21,6 +21,11 @@ class DeploySpeculumTest < ActiveSupport::TestCase
     assert_includes script, "bundle exec rails server"
     assert_includes script, "EnvironmentFile=$ENV_FILE"
     assert_includes script, "Environment=PATH=$SERVICE_PATH"
+    assert_includes script, 'BASH_BIN="${BASH_BIN:-/bin/bash}"'
+    assert_includes script, "ExecStart=$BASH_BIN"
+    assert_includes script, "health_check"
+    assert_includes script, "curl --fail"
+    assert_includes script, "journalctl -u"
     assert_includes script, 'export PATH="$SERVICE_PATH:$PATH"'
     assert_includes script, "PORT=\"${PORT:-5000}\""
     assert_includes script, "update_runtime_env"

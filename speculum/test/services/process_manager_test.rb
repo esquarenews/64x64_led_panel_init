@@ -63,4 +63,18 @@ class ProcessManagerTest < ActiveSupport::TestCase
       end
     end
   end
+
+  test "recent log tails large log files without reading unrelated old entries" do
+    Dir.mktmpdir do |runtime_dir|
+      runtime_root = Pathname.new(runtime_dir)
+      logfile = runtime_root.join("speculum.log")
+      logfile.write((["old"] * 20_000 + ["Sending recent.png...", "DONE"]).join("\n"))
+
+      stub_singleton_method(Speculum::Paths, :logfile, logfile) do
+        lines = Speculum::ProcessManager.new.recent_log(lines: 2)
+
+        assert_equal ["Sending recent.png...", "DONE"], lines
+      end
+    end
+  end
 end

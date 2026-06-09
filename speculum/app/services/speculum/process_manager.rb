@@ -47,7 +47,7 @@ module Speculum
     def recent_log(lines: 12)
       return [] unless Paths.logfile.exist?
 
-      Paths.logfile.readlines.last(lines).map(&:strip)
+      tail_lines(Paths.logfile, lines).map(&:strip)
     end
 
     def preview(library, settings)
@@ -94,6 +94,17 @@ module Speculum
 
       name = Paths.queue_file.read.strip
       image_names.include?(name) ? name : nil
+    end
+
+    def tail_lines(path, lines)
+      max_bytes = 128 * 1024
+      File.open(path, "rb") do |file|
+        size = file.size
+        file.seek([size - max_bytes, 0].max)
+        file.read.split("\n").last(lines) || []
+      end
+    rescue Errno::ENOENT
+      []
     end
   end
 end
