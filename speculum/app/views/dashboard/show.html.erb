@@ -1,0 +1,189 @@
+<main class="app-shell">
+  <aside class="sidebar">
+    <div class="brand-block">
+      <span class="brand-icon"></span>
+      <div>
+        <p>Speculum</p>
+        <small>Panel server</small>
+      </div>
+    </div>
+
+    <div class="status-card">
+      <span class="status-dot <%= @player.running? ? "online" : "paused" %>"></span>
+      <div>
+        <strong><%= @player.status %></strong>
+        <small><%= @settings["transport"] == "serial" ? "Serial #{@settings["port"]}" : "BLE #{@settings["ble_name"]}" %></small>
+      </div>
+    </div>
+
+    <nav class="folder-list">
+      <% @folders.each do |folder| %>
+        <%= form_with url: settings_path, method: :patch, class: "folder-row #{folder[:selected] ? "selected" : ""}" do |form| %>
+          <%= hidden_field_tag "settings[selected_folder]", folder[:name] %>
+          <%= hidden_field_tag "settings[mode]", @settings["mode"] %>
+          <%= hidden_field_tag "settings[selected_image]", @settings["selected_image"] %>
+          <button type="submit">
+            <span><%= folder[:name] %></span>
+            <small><%= folder[:count] %></small>
+          </button>
+        <% end %>
+      <% end %>
+    </nav>
+
+    <%= form_with url: folders_path, class: "compact-form" do |form| %>
+      <%= form.text_field :name, placeholder: "New folder" %>
+      <%= form.submit "+", title: "Create folder" %>
+    <% end %>
+
+    <%= button_to "Sign out", session_path, method: :delete, class: "text-action" %>
+  </aside>
+
+  <section class="workspace">
+    <header class="topbar">
+      <div>
+        <h1>Display Console</h1>
+        <p><%= @images.count %> images in <%= @selected_folder %></p>
+      </div>
+
+      <div class="control-strip">
+        <%= button_to "Run", start_player_path, class: "primary-action" %>
+        <%= button_to "Pause", pause_player_path, class: "secondary-action" %>
+        <%= button_to "Hard reset", reset_player_path, class: "danger-action" %>
+      </div>
+    </header>
+
+    <% flash.each do |kind, message| %>
+      <div class="flash <%= kind %>"><%= message %></div>
+    <% end %>
+
+    <section class="preview-grid">
+      <article class="preview-pane">
+        <div class="pane-header">
+          <span>Current</span>
+          <strong><%= @preview[:current]&.dig(:name) || "Waiting" %></strong>
+        </div>
+        <% if @preview[:current] %>
+          <%= image_tag @preview[:current][:url], alt: @preview[:current][:name] %>
+        <% else %>
+          <div class="empty-preview">No image</div>
+        <% end %>
+      </article>
+
+      <article class="preview-pane">
+        <div class="pane-header">
+          <span>Next</span>
+          <strong><%= @preview[:next]&.dig(:name) || "Waiting" %></strong>
+        </div>
+        <% if @preview[:next] %>
+          <%= image_tag @preview[:next][:url], alt: @preview[:next][:name] %>
+        <% else %>
+          <div class="empty-preview">No image</div>
+        <% end %>
+      </article>
+    </section>
+
+    <section class="content-grid">
+      <article class="library-panel">
+        <div class="panel-title">
+          <div>
+            <h2>Image Library</h2>
+            <p>Upload, remove, rename, and arrange folders.</p>
+          </div>
+          <%= form_with url: images_path, multipart: true, class: "upload-form" do |form| %>
+            <%= hidden_field_tag :folder, @selected_folder %>
+            <%= form.file_field :image, accept: "image/png,image/jpeg" %>
+            <%= form.submit "Upload", class: "secondary-action" %>
+          <% end %>
+        </div>
+
+        <div class="folder-tools">
+          <%= form_with url: folder_path(@selected_folder), method: :patch, class: "inline-form" do |form| %>
+            <%= form.text_field :name, value: @selected_folder %>
+            <%= form.submit "Rename" %>
+          <% end %>
+          <%= button_to "Move up", move_up_folder_path(@selected_folder), class: "text-action" %>
+          <%= button_to "Move down", move_down_folder_path(@selected_folder), class: "text-action" %>
+        </div>
+
+        <div class="image-table">
+          <% @images.each do |image| %>
+            <div class="image-row">
+              <%= image_tag image[:url], alt: image[:name] %>
+              <div>
+                <strong><%= image[:name] %></strong>
+                <small><%= number_to_human_size(image[:bytes]) %></small>
+              </div>
+              <%= button_to "Delete", image_path(image[:name], folder: image[:folder]), method: :delete, class: "danger-link", form: { data: { turbo_confirm: "Delete #{image[:name]}?" } } %>
+            </div>
+          <% end %>
+          <% if @images.empty? %>
+            <div class="empty-state">No images in this folder yet.</div>
+          <% end %>
+        </div>
+      </article>
+
+      <aside class="settings-panel">
+        <%= form_with url: settings_path, method: :patch, scope: :settings do |form| %>
+          <div class="panel-title">
+            <div>
+              <h2>Options</h2>
+              <p>Saved for the next run.</p>
+            </div>
+            <%= form.submit "Save", class: "primary-action" %>
+          </div>
+
+          <label>Mode
+            <%= form.select :mode, [["Rotate folder", "loop"], ["Single image", "single"]], selected: @settings["mode"] %>
+          </label>
+
+          <label>Single image
+            <%= form.select :selected_image, @images.map { |image| [image[:name], image[:name]] }, { include_blank: "First image", selected: @settings["selected_image"] } %>
+          </label>
+
+          <label>Transport
+            <%= form.select :transport, [["Serial USB", "serial"], ["BLE", "ble"]], selected: @settings["transport"] %>
+          </label>
+
+          <label>Serial port
+            <%= form.select :port, [["Auto detect", "auto"]] + @ports.map { |port| [port, port] }, selected: @settings["port"] %>
+          </label>
+
+          <div class="field-row">
+            <label>Baud <%= form.number_field :baud, value: @settings["baud"] %></label>
+            <label>Dwell <%= form.number_field :dwell, value: @settings["dwell"], min: 1 %></label>
+          </div>
+
+          <div class="field-row">
+            <label>Poll <%= form.number_field :poll, value: @settings["poll"], min: 1 %></label>
+            <label>Gamma <%= form.number_field :gamma, value: @settings["gamma"], step: "0.1", min: "0.1" %></label>
+          </div>
+
+          <div class="field-row">
+            <label>Blur <%= form.number_field :blur, value: @settings["blur"], step: "0.1" %></label>
+            <label>Sharpen <%= form.number_field :sharpen, value: @settings["sharpen"], step: "0.1" %></label>
+          </div>
+
+          <label>BLE name
+            <%= form.text_field :ble_name, value: @settings["ble_name"] %>
+          </label>
+
+          <div class="toggle-list">
+            <% [["Overlay text", :overlay], ["Calendar text", :calendar], ["Color correction", :color_correct], ["Dither", :dither], ["Manual advance", :manual], ["Reset before run", :hard_reset_before_start]].each do |label, key| %>
+              <label class="toggle">
+                <%= form.check_box key, checked: @settings[key.to_s].to_s == "1" %>
+                <span><%= label %></span>
+              </label>
+            <% end %>
+          </div>
+        <% end %>
+
+        <div class="log-panel">
+          <h3>Recent output</h3>
+          <% @player.recent_log.each do |line| %>
+            <code><%= line %></code>
+          <% end %>
+        </div>
+      </aside>
+    </section>
+  </section>
+</main>

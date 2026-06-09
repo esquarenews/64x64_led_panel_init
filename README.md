@@ -40,9 +40,21 @@ brew install imagemagick  # or install from https://imagemagick.org/script/downl
 cd /path/to/lrg-board-1
 ruby src/image_player.rb --transport ble --ble-name LRGPanel --dwell 60
 # Serial fallback example:
-# ruby src/image_player.rb --transport serial --port /dev/cu.usbserial-0001
+# ruby src/image_player.rb --transport serial --port auto --hard-reset
 # Additional flags: --dir, --poll, --blur 0.6, --sharpen 0.8, --dither
 ```
 
 Drop any 128×192 (or larger) PNG/JPG images into `IMG/`. The script rescales to fit, optionally applies blur/sharpen/dithering before RGB565 quantisation, waits for the firmware to display them for 60 seconds, and then advances to the next image while the board renders the TV static transition over BLE or serial.
+
+## Speculum Web Controller
+
+`speculum/` is a Rails control app for running the image player from a home server without SSH. It provides login, run/pause/reset controls, image upload/delete, folder rename/reorder, current/next previews, and UI for the player options.
+
+```bash
+cd speculum
+bundle install
+SPECULUM_USERNAME=admin SPECULUM_PASSWORD='change-me' bundle exec rails server -b 0.0.0.0 -p 3000
+```
+
+By default the app launches `../src/image_player.rb` with serial transport, `--port auto`, and `--hard-reset`. Set `SPECULUM_RUBY=/path/to/ruby` if the server needs a specific Ruby executable for the sender.
 # 64x64_led_panel_init

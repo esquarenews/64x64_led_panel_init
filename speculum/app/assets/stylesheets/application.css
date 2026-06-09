@@ -1,0 +1,493 @@
+/*
+ * This is a manifest file that'll be compiled into application.css.
+ *
+ * With Propshaft, assets are served efficiently without preprocessing steps. You can still include
+ * application-wide styles in this file, but keep in mind that CSS precedence will follow the standard
+ * cascading order, meaning styles declared later in the document or manifest will override earlier ones,
+ * depending on specificity.
+ *
+ * Consider organizing styles into separate files for maintainability.
+ */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f4f6f3;
+  color: #1b1f1d;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.login-shell {
+  align-items: center;
+  background: radial-gradient(circle at top left, #d7e2c7, transparent 34%), #111514;
+  display: flex;
+  min-height: 100vh;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-panel {
+  background: #fbfcf7;
+  border: 1px solid #dfe5dc;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.24);
+  display: grid;
+  gap: 24px;
+  max-width: 420px;
+  padding: 32px;
+  width: 100%;
+}
+
+.product-mark {
+  color: #718257;
+  font-weight: 800;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 32px;
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+h3 {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.muted,
+.panel-title p,
+.topbar p,
+.brand-block small,
+.status-card small,
+.image-row small {
+  color: #68706a;
+}
+
+.login-form,
+.settings-panel form {
+  display: grid;
+  gap: 14px;
+}
+
+label {
+  color: #4f5751;
+  display: grid;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 7px;
+  text-transform: uppercase;
+}
+
+input,
+select {
+  background: #ffffff;
+  border: 1px solid #d7ddd5;
+  border-radius: 6px;
+  color: #202522;
+  min-height: 40px;
+  padding: 9px 10px;
+  width: 100%;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #151a18;
+  color: #f7faf5;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 18px;
+}
+
+.brand-block,
+.status-card,
+.folder-row button,
+.topbar,
+.control-strip,
+.panel-title,
+.folder-tools,
+.field-row,
+.toggle,
+.image-row {
+  align-items: center;
+  display: flex;
+}
+
+.brand-block {
+  gap: 12px;
+}
+
+.brand-icon {
+  background: linear-gradient(135deg, #e9ff73, #48b28b);
+  border-radius: 6px;
+  height: 34px;
+  width: 34px;
+}
+
+.brand-block p {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.status-card {
+  background: #202723;
+  border: 1px solid #303b35;
+  border-radius: 8px;
+  gap: 10px;
+  padding: 14px;
+}
+
+.status-dot {
+  border-radius: 50%;
+  height: 10px;
+  width: 10px;
+}
+
+.status-dot.online {
+  background: #80d45d;
+}
+
+.status-dot.paused {
+  background: #e0ac4b;
+}
+
+.folder-list {
+  display: grid;
+  gap: 6px;
+}
+
+.folder-row {
+  margin: 0;
+}
+
+.folder-row button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #d8ded9;
+  cursor: pointer;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.folder-row.selected button,
+.folder-row button:hover {
+  background: #2a342e;
+  color: #ffffff;
+}
+
+.compact-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 42px;
+}
+
+.workspace {
+  display: grid;
+  gap: 20px;
+  padding: 28px;
+}
+
+.topbar {
+  justify-content: space-between;
+}
+
+.control-strip {
+  gap: 10px;
+}
+
+.primary-action,
+.secondary-action,
+.danger-action,
+.text-action,
+.danger-link,
+.folder-tools input[type="submit"],
+.compact-form input[type="submit"] {
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.primary-action {
+  background: #222820;
+  color: #ffffff;
+}
+
+.secondary-action {
+  background: #dce8d0;
+  color: #1c241d;
+}
+
+.danger-action,
+.danger-link {
+  background: #f3d7cd;
+  color: #7f241c;
+}
+
+.text-action {
+  background: transparent;
+  color: #aab4ad;
+  padding: 0;
+}
+
+.preview-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preview-pane,
+.library-panel,
+.settings-panel {
+  background: #ffffff;
+  border: 1px solid #dfe5dc;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.preview-pane {
+  display: grid;
+  gap: 14px;
+  min-height: 320px;
+  padding: 16px;
+}
+
+.pane-header {
+  display: grid;
+  gap: 4px;
+}
+
+.pane-header span {
+  color: #718257;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pane-header strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.preview-pane img,
+.empty-preview {
+  aspect-ratio: 2 / 3;
+  background: #151a18;
+  border-radius: 6px;
+  height: min(48vw, 360px);
+  justify-self: center;
+  object-fit: cover;
+  width: min(100%, 240px);
+}
+
+.empty-preview {
+  align-items: center;
+  color: #8b958d;
+  display: flex;
+  justify-content: center;
+}
+
+.content-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+}
+
+.content-grid > * {
+  min-width: 0;
+}
+
+.library-panel,
+.settings-panel {
+  padding: 18px;
+}
+
+.settings-panel .primary-action,
+.settings-panel .secondary-action,
+.settings-panel .danger-action {
+  width: auto;
+}
+
+.panel-title {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.upload-form,
+.folder-tools,
+.inline-form {
+  display: flex;
+  gap: 8px;
+}
+
+.upload-form input[type="file"] {
+  max-width: 210px;
+}
+
+.folder-tools {
+  border-bottom: 1px solid #e5e9e2;
+  margin-bottom: 10px;
+  padding-bottom: 14px;
+}
+
+.inline-form {
+  flex: 1;
+}
+
+.inline-form input[type="text"] {
+  min-width: 0;
+  width: 100%;
+}
+
+.image-table {
+  display: grid;
+}
+
+.image-row {
+  border-bottom: 1px solid #eef1ec;
+  gap: 12px;
+  min-height: 66px;
+  padding: 9px 0;
+}
+
+.image-row img {
+  border-radius: 4px;
+  height: 48px;
+  object-fit: cover;
+  width: 48px;
+}
+
+.image-row div {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.image-row strong {
+  overflow-wrap: anywhere;
+}
+
+.field-row {
+  gap: 10px;
+}
+
+.field-row label {
+  flex: 1;
+}
+
+.toggle-list,
+.log-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.toggle {
+  background: #f7f9f4;
+  border: 1px solid #e2e7dd;
+  border-radius: 6px;
+  grid-template-columns: 18px 1fr;
+  min-height: 38px;
+  padding: 0 10px;
+  text-transform: none;
+}
+
+.toggle input {
+  min-height: 0;
+  padding: 0;
+}
+
+.log-panel {
+  border-top: 1px solid #e5e9e2;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.log-panel code {
+  background: #151a18;
+  border-radius: 4px;
+  color: #dfead9;
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  padding: 7px;
+}
+
+.flash {
+  border-radius: 6px;
+  font-weight: 700;
+  padding: 12px 14px;
+}
+
+.flash.notice {
+  background: #e3efd9;
+  color: #2d5b32;
+}
+
+.flash.alert {
+  background: #f6d8d2;
+  color: #8d2b23;
+}
+
+.empty-state {
+  color: #68706a;
+  padding: 28px 0;
+  text-align: center;
+}
+
+@media (max-width: 980px) {
+  .app-shell,
+  .content-grid,
+  .preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    min-height: auto;
+  }
+
+  .topbar,
+  .panel-title,
+  .folder-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .control-strip,
+  .upload-form {
+    flex-wrap: wrap;
+  }
+}

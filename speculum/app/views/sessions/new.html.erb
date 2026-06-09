@@ -1,0 +1,25 @@
+<main class="login-shell">
+  <section class="login-panel">
+    <div>
+      <p class="product-mark">Speculum</p>
+      <h1>LED panel control</h1>
+      <p class="muted">Sign in to manage the image player on this server.</p>
+    </div>
+
+    <% if flash[:alert] %>
+      <div class="flash alert"><%= flash[:alert] %></div>
+    <% end %>
+
+    <%= form_with url: session_path, class: "login-form" do |form| %>
+      <label>
+        Username
+        <%= form.text_field :username, value: "admin", autocomplete: "username" %>
+      </label>
+      <label>
+        Password
+        <%= form.password_field :password, autocomplete: "current-password" %>
+      </label>
+      <%= form.submit "Sign in", class: "primary-action" %>
+    <% end %>
+  </section>
+</main>

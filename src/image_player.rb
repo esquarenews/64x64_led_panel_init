@@ -508,12 +508,23 @@ class BleTransport
 end
 
 class SerialTransport
-  def initialize(port:, baud: 115_200)
+  SERIAL_PORT_GLOBS = %w[
+    /dev/cu.usb*
+    /dev/ttyUSB*
+    /dev/ttyACM*
+    /dev/serial/by-id/*
+  ].freeze
+
+  @@auto_cursor = 0
+
+  def initialize(port:, baud: 115_200, hard_reset: false)
     raise 'The serialport gem is required. Install it with `gem install serialport`.' unless defined?(SerialPort) && SerialPort
 
-    @port = port
+    @auto_port = port.nil? || port.to_s.strip.empty? || port.to_s == 'auto'
+    @port = @auto_port ? nil : port
     @port_pattern = derive_port_pattern(port)
     @baud = baud
+    @hard_reset = hard_reset
     @serial = nil
     @buffer = +' '
     @buffer.clear
@@ -570,10 +581,15 @@ class SerialTransport
   private
 
   def open_serial
-    @serial = SerialPort.new(@port, @baud)
+    if @auto_port
+      open_first_available_serial
+    else
+      @serial = SerialPort.new(@port, @baud)
+    end
     begin
       @serial.read_timeout = 1000 if @serial.respond_to?(:read_timeout=)
-      # Keep reset/boot lines deasserted; low values can reboot the ESP32.
+      pulse_reset_lines if @hard_reset
+      # Keep reset/boot lines deasserted after any optional reset pulse.
       @serial.dtr = 1 if @serial.respond_to?(:dtr=)
       @serial.rts = 1 if @serial.respond_to?(:rts=)
       @serial.flow_control = SerialPort::NONE if @serial.respond_to?(:flow_control=)
@@ -581,6 +597,43 @@ class SerialTransport
       nil
     end
     sleep 0.1
+  end
+
+  def open_first_available_serial
+    candidates = serial_port_candidates
+    raise 'No USB serial ports found. Connect the ESP32 and try again.' if candidates.empty?
+
+    last_error = nil
+    start = @@auto_cursor % candidates.length
+    candidates.rotate(start).each_with_index do |candidate, index|
+      begin
+        @serial = SerialPort.new(candidate, @baud)
+        @port = candidate
+        @port_pattern = derive_port_pattern(candidate)
+        @@auto_cursor = (start + index + 1) % candidates.length
+        warn "Serial auto-detect selected #{candidate}"
+        return
+      rescue StandardError => e
+        last_error = e
+      end
+    end
+
+    raise "No usable USB serial ports found: #{last_error.class}: #{last_error.message}"
+  end
+
+  def serial_port_candidates
+    SERIAL_PORT_GLOBS.flat_map { |glob| Dir[glob] }.uniq.sort
+  end
+
+  def pulse_reset_lines
+    @serial.dtr = 0 if @serial.respond_to?(:dtr=)
+    @serial.rts = 1 if @serial.respond_to?(:rts=)
+    sleep 0.12
+    @serial.dtr = 1 if @serial.respond_to?(:dtr=)
+    @serial.rts = 1 if @serial.respond_to?(:rts=)
+    sleep 0.35
+  rescue StandardError => e
+    warn "Serial reset pulse skipped: #{e.class}: #{e.message}"
   end
 
   def ensure_serial
@@ -602,7 +655,9 @@ class SerialTransport
           raise "Serial device unavailable after #{attempts} attempts: #{e.class}: #{e.message}"
         end
         warn "Serial reconnect attempt #{attempts} failed: #{e.class}: #{e.message} (retrying...)" if attempts == 1 || (attempts % 10).zero?
-        if e.is_a?(Errno::ENOENT)
+        if @auto_port
+          @port = nil
+        elsif e.is_a?(Errno::ENOENT)
           if (replacement = find_replacement_port)
             warn "Serial port changed, switching to #{replacement}"
             @port = replacement
@@ -614,6 +669,8 @@ class SerialTransport
   end
 
   def derive_port_pattern(port)
+    return nil if port.nil? || port.to_s == 'auto'
+
     base = File.basename(port)
     if (m = base.match(/([a-zA-Z_.]+)\d+/))
       m[1]
@@ -1205,15 +1262,6 @@ BITFONT_5X7 = {
     ..#..
     .....
   ],
-  '.' => %w[
-    .....
-    .....
-    .....
-    .....
-    .....
-    ..#..
-    ..#..
-  ],
   '/' => %w[
     ....#
     ...#.
@@ -1752,7 +1800,8 @@ options = {
   gamma: COLOR_GAMMA,
   test_pattern: false,
   static_test: false,
-  single: false
+  single: false,
+  hard_reset: false
 }
 
 OptionParser.new do |opts|
@@ -1760,7 +1809,7 @@ OptionParser.new do |opts|
   opts.on('-t', '--transport MODE', 'Transport: serial or ble (default: ble)') do |value|
     options[:transport] = value.downcase
   end
-  opts.on('-p', '--port PATH', 'Serial port device (for serial transport)') { |value| options[:port] = value }
+  opts.on('-p', '--port PATH', 'Serial port device, or "auto" to scan USB serial ports') { |value| options[:port] = value }
   opts.on('-b', '--baud RATE', Integer, "Serial baud rate (default: #{options[:baud]})") { |value| options[:baud] = value }
   opts.on('--ble-name NAME', 'BLE device name (default: LRGPanel)') { |value| options[:ble_name] = value }
   opts.on('--ble-address ADDR', 'BLE address override') { |value| options[:ble_address] = value }
@@ -1806,6 +1855,9 @@ OptionParser.new do |opts|
   opts.on('--single', 'Display the first image found once and exit (no looping)') do
     options[:single] = true
   end
+  opts.on('--hard-reset', 'Pulse serial control lines before waiting for the ESP32') do
+    options[:hard_reset] = true
+  end
   opts.on('-h', '--help', 'Show this help message') do
     puts opts
     exit
@@ -1821,8 +1873,7 @@ transport = nil
 def build_transport(options)
   case options[:transport]
   when 'serial'
-    raise 'Provide --port when using serial transport.' if options[:port].nil? || options[:port].empty?
-    SerialTransport.new(port: options[:port], baud: options[:baud])
+    SerialTransport.new(port: options[:port] || 'auto', baud: options[:baud], hard_reset: options[:hard_reset])
   when 'ble'
     BleTransport.new(name: options[:ble_name], address: options[:ble_address])
   else
