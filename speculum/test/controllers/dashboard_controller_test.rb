@@ -108,7 +108,26 @@ class DashboardControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "expired form token redirects to login instead of raising 422" do
+    with_dashboard_project do |_project_root, _storage_root|
+      with_forgery_protection do
+        post start_player_path
+      end
+
+      assert_redirected_to new_session_path
+      assert_equal "The page expired. Please sign in again.", flash[:alert]
+    end
+  end
+
   private
+
+  def with_forgery_protection
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    yield
+  ensure
+    ActionController::Base.allow_forgery_protection = original
+  end
 
   def with_dashboard_project
     Dir.mktmpdir do |project_dir|
