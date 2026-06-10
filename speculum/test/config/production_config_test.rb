@@ -80,10 +80,13 @@ class ProductionConfigTest < ActiveSupport::TestCase
     layout = Rails.root.join("app/views/layouts/application.html.erb").read
     dashboard = Rails.root.join("app/views/dashboard/show.html.erb").read
     login = Rails.root.join("app/views/sessions/new.html.erb").read
+    manifest = Rails.root.join("app/views/pwa/manifest.json.erb").read
 
     assert_path_exists Rails.root.join("app/assets/images/speculum-logo.png")
-    assert_path_exists Rails.root.join("public/icon.png")
-    assert_includes layout, 'href="/icon.png"'
+    assert_path_exists Rails.root.join("public/speculum-icon-v2.png")
+    assert_includes layout, 'href="/speculum-icon-v2.png"'
+    assert_includes manifest, '"/speculum-icon-v2.png"'
+    assert_not_includes layout, 'href="/icon.png"'
     assert_not_includes layout, 'href="/icon.svg"'
     assert_includes dashboard, "speculum-logo.png"
     assert_includes login, "speculum-logo.png"
