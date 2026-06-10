@@ -68,6 +68,8 @@
   };
 
   const updateCountdowns = () => {
+    const playerRunning = document.querySelector("[data-player-running='true']");
+
     document.querySelectorAll("[data-countdown-started-at][data-countdown-duration]").forEach((timer) => {
       const startedAt = Date.parse(timer.dataset.countdownStartedAt);
       const duration = Number.parseInt(timer.dataset.countdownDuration, 10);
@@ -77,9 +79,9 @@
       const remaining = Math.max(0, duration - elapsed);
       timer.textContent = `${timer.dataset.countdownPrefix} ${formatRemaining(remaining)}`;
 
-      if (remaining === 0 && elapsed <= duration + 2 && !window.__previewReloadQueued) {
+      if (remaining === 0 && playerRunning && !window.__previewReloadQueued) {
         window.__previewReloadQueued = true;
-        window.setTimeout(() => window.location.reload(), 1500);
+        window.setTimeout(() => window.location.reload(), 1000);
       }
     });
   };

@@ -76,13 +76,15 @@ module Speculum
     def preview(library, settings)
       folder = settings["selected_folder"]
       if (state = player_state)
-        current = state["current"]
-        next_image = queued_image_name.presence || state["next"]
-        return {
-          current: current && library.image_record_for(folder, current),
-          next: next_image && library.image_record_for(folder, next_image),
-          timer: timer_state(state) || timer_state(displaying_state)
-        }
+        if fresh_state?(state)
+          current = state["current"]
+          next_image = queued_image_name.presence || state["next"]
+          return {
+            current: current && library.image_record_for(folder, current),
+            next: next_image && library.image_record_for(folder, next_image),
+            timer: timer_state(state) || timer_state(displaying_state)
+          }
+        end
       end
 
       display_state = displaying_state
