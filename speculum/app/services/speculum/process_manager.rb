@@ -30,47 +30,35 @@ module Speculum
 
     def start(settings)
       if running?
-        if unhealthy?
-          restart(settings)
-          return :restarted
-        end
-
-        raise "Speculum is already running"
+        restart(settings)
+        return :restarted
       end
 
-      FileUtils.mkdir_p(Paths.runtime_root)
-      FileUtils.rm_f(Paths.state_file)
-      FileUtils.rm_f(Paths.queue_file)
-      command = PlayerCommand.new(settings).argv
-      log = File.open(Paths.logfile, "a")
-      log.sync = true
-      child_pid = Process.spawn(*command, chdir: Paths.project_root.to_s, out: log, err: log, pgroup: true)
-      Paths.pidfile.write(child_pid.to_s)
-      child_pid
-    ensure
-      log&.close
+      spawn_player(settings)
     end
 
     def pause
       current_pid = pid
-      return unless current_pid && running?
+      return clear_runtime_state unless current_pid && running?
 
-      signal_process_group("TERM", current_pid)
-      wait_for_exit(current_pid)
+      stop_pid(current_pid, force_clear: true)
     rescue Errno::ESRCH
       nil
     ensure
-      Paths.pidfile.delete if Paths.pidfile.exist? && !process_alive?(current_pid)
+      clear_runtime_state
     end
 
     def restart(settings)
-      pause if running?
-      start(settings)
+      current_pid = pid
+      stop_pid(current_pid, force_clear: true) if current_pid
+      clear_runtime_state
+      spawn_player(settings)
     end
 
     def unhealthy?(max_startup_age: 90)
       return false unless running?
-      return false if player_state || displaying_state
+      state = player_state || displaying_state
+      return !fresh_state?(state) if state
 
       if Paths.pidfile.exist?
         Time.now - Paths.pidfile.mtime > max_startup_age
@@ -118,6 +106,25 @@ module Speculum
 
     private
 
+    def spawn_player(settings)
+      FileUtils.mkdir_p(Paths.runtime_root)
+      clear_runtime_state
+      command = PlayerCommand.new(settings).argv
+      log = File.open(Paths.logfile, "a")
+      log.sync = true
+      child_pid = Process.spawn(*command, chdir: Paths.project_root.to_s, out: log, err: log, pgroup: true)
+      Paths.pidfile.write(child_pid.to_s)
+      child_pid
+    ensure
+      log&.close
+    end
+
+    def clear_runtime_state
+      FileUtils.rm_f(Paths.pidfile)
+      FileUtils.rm_f(Paths.state_file)
+      FileUtils.rm_f(Paths.queue_file)
+    end
+
     def timer_state(state)
       return unless state
 
@@ -129,6 +136,17 @@ module Speculum
         started_at: started_at,
         duration: duration
       }
+    end
+
+    def fresh_state?(state)
+      return false unless state
+
+      updated_at = Time.iso8601(state["updated_at"].to_s)
+      dwell = state["dwell_seconds"].to_i
+      max_age = dwell.positive? ? dwell + 30 : 90
+      Time.now - updated_at <= max_age
+    rescue ArgumentError
+      false
     end
 
     def player_state
@@ -157,6 +175,13 @@ module Speculum
       nil
     rescue Errno::ENOENT
       nil
+    end
+
+    def stop_pid(target_pid, force_clear:)
+      signal_process("TERM", target_pid)
+      wait_for_exit(target_pid)
+    ensure
+      clear_runtime_state if force_clear
     end
 
     def wait_for_exit(target_pid)
@@ -204,6 +229,13 @@ module Speculum
       Process.kill(signal, -target_pid)
     rescue Errno::ESRCH
       Process.kill(signal, target_pid)
+    end
+
+    def signal_process(signal, target_pid)
+      signal_process_group(signal, target_pid)
+      Process.kill(signal, target_pid)
+    rescue Errno::ESRCH
+      nil
     end
 
     def current_image_name

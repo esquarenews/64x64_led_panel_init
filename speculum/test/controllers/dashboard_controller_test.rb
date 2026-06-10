@@ -65,6 +65,23 @@ class DashboardControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "hard reset starts player when it was paused" do
+    with_dashboard_project do |_project_root, _storage_root|
+      player = FakePlayer.new(false)
+      resetter = FakeResetter.new(false)
+
+      stub_singleton_method(Speculum::ProcessManager, :new, player) do
+        stub_singleton_method(Speculum::PortResetter, :new, resetter) do
+          post reset_player_path
+        end
+      end
+
+      assert_redirected_to root_path
+      assert resetter.called
+      assert_equal "1", player.restarted_with["hard_reset_before_start"]
+    end
+  end
+
   private
 
   def with_dashboard_project

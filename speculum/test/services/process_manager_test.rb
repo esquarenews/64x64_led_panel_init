@@ -55,6 +55,22 @@ class ProcessManagerTest < ActiveSupport::TestCase
     end
   end
 
+  test "running player with stale display state is unhealthy" do
+    Dir.mktmpdir do |runtime_dir|
+      runtime_root = Pathname.new(runtime_dir)
+      pidfile = runtime_root.join("speculum.pid")
+      statefile = runtime_root.join("player_state.json")
+      pidfile.write(Process.pid.to_s)
+      statefile.write(JSON.generate("current" => "alpha.png", "updated_at" => (Time.now - 300).utc.iso8601, "dwell_seconds" => 60))
+
+      stub_singleton_method(Speculum::Paths, :pidfile, pidfile) do
+        stub_singleton_method(Speculum::Paths, :state_file, statefile) do
+          assert Speculum::ProcessManager.new.unhealthy?
+        end
+      end
+    end
+  end
+
   test "running player with display state is healthy" do
     Dir.mktmpdir do |runtime_dir|
       runtime_root = Pathname.new(runtime_dir)
@@ -70,6 +86,21 @@ class ProcessManagerTest < ActiveSupport::TestCase
         end
       end
     end
+  end
+
+  test "start replaces an existing running player" do
+    manager = Speculum::ProcessManager.new
+    restarted_with = nil
+    settings = { "selected_folder" => "IMG" }
+
+    manager.define_singleton_method(:running?) { true }
+    manager.define_singleton_method(:restart) do |restart_settings|
+      restarted_with = restart_settings
+      123
+    end
+
+    assert_equal :restarted, manager.start(settings)
+    assert_same settings, restarted_with
   end
 
   test "preview shows queued image as next image" do
