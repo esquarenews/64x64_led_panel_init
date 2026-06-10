@@ -70,7 +70,7 @@ module Speculum
     def recent_log(lines: 12)
       return [] unless Paths.logfile.exist?
 
-      tail_lines(Paths.logfile, lines).map(&:strip)
+      tail_lines(Paths.logfile, lines).map { |line| sanitize_log_line(line) }
     end
 
     def preview(library, settings)
@@ -272,6 +272,10 @@ module Speculum
       end
     rescue Errno::ENOENT
       []
+    end
+
+    def sanitize_log_line(line)
+      line.to_s.dup.force_encoding(Encoding::UTF_8).scrub.strip
     end
   end
 end

@@ -288,4 +288,20 @@ class ProcessManagerTest < ActiveSupport::TestCase
       end
     end
   end
+
+  test "recent log sanitizes binary lines for html rendering" do
+    Dir.mktmpdir do |runtime_dir|
+      runtime_root = Pathname.new(runtime_dir)
+      logfile = runtime_root.join("speculum.log")
+      logfile.binwrite("READY\nbinary\xFFline\n")
+
+      stub_singleton_method(Speculum::Paths, :logfile, logfile) do
+        lines = Speculum::ProcessManager.new.recent_log(lines: 2)
+
+        assert_equal "READY", lines.first
+        assert lines.second.valid_encoding?
+        assert_equal Encoding::UTF_8, lines.second.encoding
+      end
+    end
+  end
 end
