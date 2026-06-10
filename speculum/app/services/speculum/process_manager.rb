@@ -112,7 +112,7 @@ module Speculum
       FileUtils.mkdir_p(Paths.runtime_root)
       clear_runtime_state
       command = PlayerCommand.new(settings).argv
-      log = File.open(Paths.logfile, "a")
+      log = File.open(Paths.logfile, "w")
       log.sync = true
       child_pid = Process.spawn(*command, chdir: Paths.project_root.to_s, out: log, err: log, pgroup: true)
       Paths.pidfile.write(child_pid.to_s)

@@ -103,6 +103,49 @@ class ProcessManagerTest < ActiveSupport::TestCase
     assert_same settings, restarted_with
   end
 
+  test "start clears stale log output from previous run" do
+    Dir.mktmpdir do |project_dir|
+      Dir.mktmpdir do |runtime_dir|
+        project_root = Pathname.new(project_dir)
+        runtime_root = Pathname.new(runtime_dir)
+        logfile = runtime_root.join("speculum.log")
+        statefile = runtime_root.join("player_state.json")
+        queuefile = runtime_root.join("next_image.txt")
+        pidfile = runtime_root.join("speculum.pid")
+        player_script = runtime_root.join("fake_player.rb")
+        logfile.write("Displaying stale.png for 60 seconds...\n")
+        player_script.write("sleep 5\n")
+
+        stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+          stub_singleton_method(Speculum::Paths, :runtime_root, runtime_root) do
+            stub_singleton_method(Speculum::Paths, :logfile, logfile) do
+              stub_singleton_method(Speculum::Paths, :state_file, statefile) do
+                stub_singleton_method(Speculum::Paths, :queue_file, queuefile) do
+                  stub_singleton_method(Speculum::Paths, :pidfile, pidfile) do
+                    stub_singleton_method(Speculum::Paths, :image_player, player_script) do
+                      Speculum::ProcessManager.new.start(Speculum::Settings::DEFAULTS)
+                      assert_equal "", logfile.read
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      ensure
+        if pidfile&.exist?
+          begin
+            child_pid = pidfile.read.to_i
+            Process.kill("TERM", child_pid)
+            Process.waitpid(child_pid)
+          rescue Errno::ESRCH, Errno::ECHILD
+            nil
+          end
+        end
+      end
+    end
+  end
+
   test "preview shows queued image as next image" do
     Dir.mktmpdir do |project_dir|
       Dir.mktmpdir do |runtime_dir|
