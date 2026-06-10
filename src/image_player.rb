@@ -1774,7 +1774,6 @@ def queued_image_path(queue_file, image_dir)
   return nil if queue_file.nil? || queue_file.empty? || !File.file?(queue_file)
 
   queued_name = File.read(queue_file).strip
-  FileUtils.rm_f(queue_file)
   return nil if queued_name.empty?
 
   safe_name = File.basename(queued_name)
@@ -1786,7 +1785,7 @@ def queued_image_path(queue_file, image_dir)
 
   path
 rescue StandardError => e
-  warn "Failed to consume queued image: #{e.class}: #{e.message}"
+  warn "Failed to read queued image: #{e.class}: #{e.message}"
   nil
 end
 
@@ -2105,6 +2104,7 @@ loop do
       end
 
     frames_sent += 1
+    FileUtils.rm_f(options[:queue_file]) if queued_path && options[:queue_file]
     write_player_state(
       options[:state_file],
       current: image_path,
