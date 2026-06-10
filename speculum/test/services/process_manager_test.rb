@@ -297,6 +297,33 @@ class ProcessManagerTest < ActiveSupport::TestCase
     end
   end
 
+  test "preview ignores queued image once it is current in player state" do
+    Dir.mktmpdir do |project_dir|
+      Dir.mktmpdir do |runtime_dir|
+        project_root = Pathname.new(project_dir)
+        runtime_root = Pathname.new(runtime_dir)
+        FileUtils.mkdir_p(project_root.join("IMG"))
+        project_root.join("IMG/alpha.png").write("image")
+        project_root.join("IMG/bravo.png").write("image")
+        runtime_root.join("player_state.json").write(JSON.generate("current" => "bravo.png", "next" => "alpha.png", "updated_at" => Time.now.utc.iso8601, "dwell_seconds" => 60))
+        runtime_root.join("next_image.txt").write("bravo.png")
+
+        stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+          stub_singleton_method(Speculum::Paths, :state_file, runtime_root.join("player_state.json")) do
+            stub_singleton_method(Speculum::Paths, :queue_file, runtime_root.join("next_image.txt")) do
+              settings = Speculum::Settings::DEFAULTS.merge("selected_folder" => "IMG")
+              library = Speculum::ImageLibrary.new(settings)
+              preview = Speculum::ProcessManager.new.preview(library, settings)
+
+              assert_equal "bravo.png", preview[:current][:name]
+              assert_equal "alpha.png", preview[:next][:name]
+            end
+          end
+        end
+      end
+    end
+  end
+
   test "preview uses displayed image and countdown before sent image fallback" do
     Dir.mktmpdir do |project_dir|
       Dir.mktmpdir do |runtime_dir|
@@ -320,6 +347,36 @@ class ProcessManagerTest < ActiveSupport::TestCase
               assert_equal "bravo.png", preview[:next][:name]
               assert_equal 60, preview[:timer][:duration]
               assert_equal "2026-06-10T00:00:00Z", preview[:timer][:started_at]
+            end
+          end
+        end
+      end
+    end
+  end
+
+  test "preview ignores queued image once it is current in display log" do
+    Dir.mktmpdir do |project_dir|
+      Dir.mktmpdir do |runtime_dir|
+        project_root = Pathname.new(project_dir)
+        runtime_root = Pathname.new(runtime_dir)
+        FileUtils.mkdir_p(project_root.join("IMG"))
+        project_root.join("IMG/alpha.png").write("image")
+        project_root.join("IMG/bravo.png").write("image")
+        logfile = runtime_root.join("speculum.log")
+        logfile.write("READY\nDisplaying bravo.png for 60 seconds...\n")
+        runtime_root.join("next_image.txt").write("bravo.png")
+
+        stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+          stub_singleton_method(Speculum::Paths, :runtime_root, runtime_root) do
+            stub_singleton_method(Speculum::Paths, :logfile, logfile) do
+              stub_singleton_method(Speculum::Paths, :queue_file, runtime_root.join("next_image.txt")) do
+                settings = Speculum::Settings::DEFAULTS.merge("selected_folder" => "IMG")
+                library = Speculum::ImageLibrary.new(settings)
+                preview = Speculum::ProcessManager.new.preview(library, settings)
+
+                assert_equal "bravo.png", preview[:current][:name]
+                assert_equal "alpha.png", preview[:next][:name]
+              end
             end
           end
         end

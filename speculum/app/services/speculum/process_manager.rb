@@ -81,7 +81,7 @@ module Speculum
       if (state = player_state)
         if fresh_state?(state) && !log_newer_than_state?(state)
           current = state["current"]
-          next_image = queued_image_name.presence || state["next"]
+          next_image = queued_image_name_after(current).presence || state["next"]
           return {
             current: current && library.image_record_for(folder, current),
             next: next_image && library.image_record_for(folder, next_image),
@@ -94,7 +94,7 @@ module Speculum
       current_record = current && library.image_record_for(folder, current)
       current = nil unless current_record
 
-      queued = queued_image_name
+      queued = queued_image_name_after(current)
       queued_record = queued && library.image_record_for(folder, queued)
       queued = nil unless queued_record
 
@@ -272,6 +272,14 @@ module Speculum
       return unless Paths.queue_file.exist?
 
       Paths.queue_file.read.strip
+    end
+
+    def queued_image_name_after(current)
+      queued = queued_image_name
+      return if queued.blank?
+      return if current.present? && queued == File.basename(current.to_s)
+
+      queued
     end
 
     def tail_lines(path, lines)
