@@ -2,13 +2,17 @@ require "test_helper"
 require "tmpdir"
 
 class DashboardControllerTest < ActionDispatch::IntegrationTest
-  FakePlayer = Struct.new(:running, :restarted_with) do
+  FakePlayer = Struct.new(:running, :restarted_with, :preview_result) do
     def running?
       running
     end
 
     def restart(settings)
       self.restarted_with = settings
+    end
+
+    def preview(_library, _settings)
+      preview_result || {}
     end
   end
 
@@ -79,6 +83,28 @@ class DashboardControllerTest < ActionDispatch::IntegrationTest
       assert_redirected_to root_path
       assert resetter.called
       assert_equal "1", player.restarted_with["hard_reset_before_start"]
+    end
+  end
+
+  test "preview returns current and next image json" do
+    with_dashboard_project do |_project_root, _storage_root|
+      player = FakePlayer.new(true)
+      player.preview_result = {
+        current: { name: "a.png", thumbnail_url: "/images/thumbnail?folder=IMG&name=a.png" },
+        next: { name: "b.png", thumbnail_url: "/images/thumbnail?folder=IMG&name=b.png" },
+        timer: { started_at: "2026-06-10T00:00:00Z", duration: 60 }
+      }
+
+      stub_singleton_method(Speculum::ProcessManager, :new, player) do
+        get preview_player_path
+      end
+
+      assert_response :success
+      payload = JSON.parse(response.body)
+      assert_equal true, payload["running"]
+      assert_equal "a.png", payload.dig("preview", "current", "name")
+      assert_equal "b.png", payload.dig("preview", "next", "name")
+      assert_equal 60, payload.dig("preview", "timer", "duration")
     end
   end
 

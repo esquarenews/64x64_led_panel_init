@@ -75,20 +75,22 @@ module Speculum
 
     def preview(library, settings)
       folder = settings["selected_folder"]
+      display_state = displaying_state
+      sent_current = current_image_name
+
       if (state = player_state)
-        if fresh_state?(state)
+        if fresh_state?(state) && !log_newer_than_state?(state)
           current = state["current"]
           next_image = queued_image_name.presence || state["next"]
           return {
             current: current && library.image_record_for(folder, current),
             next: next_image && library.image_record_for(folder, next_image),
-            timer: timer_state(state) || timer_state(displaying_state)
+            timer: timer_state(state) || timer_state(display_state)
           }
         end
       end
 
-      display_state = displaying_state
-      current = display_state&.dig("current") || current_image_name
+      current = display_state&.dig("current") || sent_current
       current_record = current && library.image_record_for(folder, current)
       current = nil unless current_record
 
@@ -148,6 +150,15 @@ module Speculum
       max_age = dwell.positive? ? dwell + 30 : 90
       Time.now - updated_at <= max_age
     rescue ArgumentError
+      false
+    end
+
+    def log_newer_than_state?(state)
+      return false unless Paths.logfile.exist?
+
+      updated_at = Time.iso8601(state["updated_at"].to_s)
+      Paths.logfile.mtime > updated_at
+    rescue ArgumentError, Errno::ENOENT
       false
     end
 

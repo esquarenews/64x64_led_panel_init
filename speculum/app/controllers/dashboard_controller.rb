@@ -57,7 +57,35 @@ class DashboardController < ApplicationController
     redirect_to root_path, alert: e.message
   end
 
+  def preview
+    expires_now
+    settings = Speculum::Settings.load
+    library = Speculum::ImageLibrary.new(settings)
+    player = Speculum::ProcessManager.new
+    render json: {
+      running: player.running?,
+      preview: preview_payload(player.preview(library, settings))
+    }
+  end
+
   private
+
+  def preview_payload(preview)
+    {
+      current: image_payload(preview[:current]),
+      next: image_payload(preview[:next]),
+      timer: preview[:timer]
+    }
+  end
+
+  def image_payload(image)
+    return unless image
+
+    {
+      name: image[:name],
+      thumbnail_url: image[:thumbnail_url]
+    }
+  end
 
   def settings_params
     permitted = params.require(:settings).permit(

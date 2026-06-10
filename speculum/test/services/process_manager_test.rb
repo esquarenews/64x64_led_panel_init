@@ -180,12 +180,14 @@ class ProcessManagerTest < ActiveSupport::TestCase
         FileUtils.mkdir_p(project_root.join("IMG"))
         project_root.join("IMG/alpha.png").write("image")
         project_root.join("IMG/bravo.png").write("image")
-        runtime_root.join("speculum.log").write("READY\nSending stale.png...\nDONE\n")
+        logfile = runtime_root.join("speculum.log")
+        logfile.write("READY\nSending stale.png...\nDONE\n")
+        FileUtils.touch(logfile, mtime: Time.now - 10)
         updated_at = Time.now.utc.iso8601
         runtime_root.join("player_state.json").write(JSON.generate("current" => "bravo.png", "next" => "alpha.png", "dwell_seconds" => 60, "updated_at" => updated_at))
 
         stub_singleton_method(Speculum::Paths, :project_root, project_root) do
-          stub_singleton_method(Speculum::Paths, :logfile, runtime_root.join("speculum.log")) do
+          stub_singleton_method(Speculum::Paths, :logfile, logfile) do
             stub_singleton_method(Speculum::Paths, :state_file, runtime_root.join("player_state.json")) do
               stub_singleton_method(Speculum::Paths, :queue_file, runtime_root.join("next_image.txt")) do
                 settings = Speculum::Settings::DEFAULTS.merge("selected_folder" => "IMG")
@@ -216,6 +218,39 @@ class ProcessManagerTest < ActiveSupport::TestCase
         statefile = runtime_root.join("player_state.json")
         logfile.write("READY\nDisplaying bravo.png for 60 seconds...\n")
         statefile.write(JSON.generate("current" => "alpha.png", "next" => "bravo.png", "dwell_seconds" => 60, "updated_at" => (Time.now - 300).utc.iso8601))
+
+        stub_singleton_method(Speculum::Paths, :project_root, project_root) do
+          stub_singleton_method(Speculum::Paths, :logfile, logfile) do
+            stub_singleton_method(Speculum::Paths, :state_file, statefile) do
+              stub_singleton_method(Speculum::Paths, :queue_file, runtime_root.join("next_image.txt")) do
+                settings = Speculum::Settings::DEFAULTS.merge("selected_folder" => "IMG")
+                library = Speculum::ImageLibrary.new(settings)
+                preview = Speculum::ProcessManager.new.preview(library, settings)
+
+                assert_equal "bravo.png", preview[:current][:name]
+                assert_equal "alpha.png", preview[:next][:name]
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  test "preview uses newer sent image over still fresh state" do
+    Dir.mktmpdir do |project_dir|
+      Dir.mktmpdir do |runtime_dir|
+        project_root = Pathname.new(project_dir)
+        runtime_root = Pathname.new(runtime_dir)
+        FileUtils.mkdir_p(project_root.join("IMG"))
+        project_root.join("IMG/alpha.png").write("image")
+        project_root.join("IMG/bravo.png").write("image")
+        logfile = runtime_root.join("speculum.log")
+        statefile = runtime_root.join("player_state.json")
+        updated_at = Time.now.utc.iso8601
+        statefile.write(JSON.generate("current" => "alpha.png", "next" => "bravo.png", "dwell_seconds" => 60, "updated_at" => updated_at))
+        sleep 0.01
+        logfile.write("READY\nSending bravo.png...\n")
 
         stub_singleton_method(Speculum::Paths, :project_root, project_root) do
           stub_singleton_method(Speculum::Paths, :logfile, logfile) do

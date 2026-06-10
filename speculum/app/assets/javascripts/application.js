@@ -81,13 +81,103 @@
 
       if (remaining === 0 && playerRunning && !window.__previewReloadQueued) {
         window.__previewReloadQueued = true;
-        window.setTimeout(() => window.location.reload(), 1000);
+        window.setTimeout(() => {
+          refreshPreview();
+          window.__previewReloadQueued = false;
+        }, 500);
       }
     });
   };
 
+  const setPreviewImage = (pane, image) => {
+    const name = pane.querySelector("[data-preview-name]");
+    const existingImage = pane.querySelector("[data-preview-image]");
+    const existingEmpty = pane.querySelector("[data-preview-empty]");
+
+    if (name) name.textContent = image ? image.name : "Waiting";
+
+    if (!image) {
+      existingImage?.remove();
+      if (!existingEmpty) {
+        const empty = document.createElement("div");
+        empty.className = "empty-preview";
+        empty.dataset.previewEmpty = "true";
+        empty.textContent = "No image";
+        pane.appendChild(empty);
+      }
+      return;
+    }
+
+    if (existingImage) {
+      if (existingImage.getAttribute("src") !== image.thumbnail_url) {
+        existingImage.setAttribute("src", image.thumbnail_url);
+      }
+      existingImage.setAttribute("alt", image.name);
+      existingEmpty?.remove();
+      return;
+    }
+
+    const img = document.createElement("img");
+    img.dataset.previewImage = "true";
+    img.src = image.thumbnail_url;
+    img.alt = image.name;
+    existingEmpty?.replaceWith(img);
+  };
+
+  const setPreviewTimer = (timer, label, timerState) => {
+    if (!timer) return;
+
+    if (!timerState) {
+      delete timer.dataset.countdownStartedAt;
+      delete timer.dataset.countdownDuration;
+      timer.classList.add("pending");
+      timer.textContent = "Timer pending";
+      return;
+    }
+
+    timer.classList.remove("pending");
+    timer.dataset.countdownPrefix = label;
+    timer.dataset.countdownStartedAt = timerState.started_at;
+    timer.dataset.countdownDuration = timerState.duration;
+  };
+
+  const refreshPreview = async () => {
+    const grid = document.querySelector("[data-preview-url]");
+    if (!grid || grid.dataset.previewLoading === "true") return;
+
+    grid.dataset.previewLoading = "true";
+    try {
+      const response = await fetch(grid.dataset.previewUrl, {
+        headers: { Accept: "application/json" },
+        cache: "no-store"
+      });
+      if (!response.ok) return;
+
+      const payload = await response.json();
+      const currentPane = grid.querySelector("[data-preview-pane='current']");
+      const nextPane = grid.querySelector("[data-preview-pane='next']");
+
+      if (currentPane) {
+        setPreviewImage(currentPane, payload.preview.current);
+        setPreviewTimer(currentPane.querySelector(".preview-timer"), "Changes in", payload.preview.timer);
+      }
+
+      if (nextPane) {
+        setPreviewImage(nextPane, payload.preview.next);
+        setPreviewTimer(nextPane.querySelector(".preview-timer"), "Up in", payload.preview.timer);
+      }
+
+      const shell = document.querySelector("[data-player-running]");
+      if (shell) shell.dataset.playerRunning = payload.running ? "true" : "false";
+      updateCountdowns();
+    } finally {
+      delete grid.dataset.previewLoading;
+    }
+  };
+
   updateCountdowns();
   window.setInterval(updateCountdowns, 1000);
+  window.setInterval(refreshPreview, 2000);
 
   document.addEventListener("submit", (event) => {
     const form = event.target;

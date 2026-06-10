@@ -8,6 +8,7 @@ Rails.application.routes.draw do
   post "player/start", to: "dashboard#start", as: :start_player
   post "player/pause", to: "dashboard#pause", as: :pause_player
   post "player/reset", to: "dashboard#reset", as: :reset_player
+  get "player/preview", to: "dashboard#preview", as: :preview_player
 
   resources :folders, only: %i[create update destroy] do
     member do

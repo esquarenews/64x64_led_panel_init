@@ -56,8 +56,8 @@
       <div class="flash <%= kind %>"><%= message %></div>
     <% end %>
 
-    <section class="preview-grid">
-      <article class="preview-pane">
+    <section class="preview-grid" data-preview-url="<%= preview_player_path %>">
+      <article class="preview-pane" data-preview-pane="current">
         <div class="pane-header">
           <div>
             <span>Current</span>
@@ -67,16 +67,16 @@
               <small class="preview-timer pending">Timer pending</small>
             <% end %>
           </div>
-          <strong><%= @preview[:current]&.dig(:name) || "Waiting" %></strong>
+          <strong data-preview-name><%= @preview[:current]&.dig(:name) || "Waiting" %></strong>
         </div>
         <% if @preview[:current] %>
-          <%= image_tag @preview[:current][:thumbnail_url], alt: @preview[:current][:name] %>
+          <%= image_tag @preview[:current][:thumbnail_url], alt: @preview[:current][:name], data: { preview_image: true } %>
         <% else %>
-          <div class="empty-preview">No image</div>
+          <div class="empty-preview" data-preview-empty>No image</div>
         <% end %>
       </article>
 
-      <article class="preview-pane">
+      <article class="preview-pane" data-preview-pane="next">
         <div class="pane-header">
           <div>
             <span>Next</span>
@@ -86,12 +86,12 @@
               <small class="preview-timer pending">Timer pending</small>
             <% end %>
           </div>
-          <strong><%= @preview[:next]&.dig(:name) || "Waiting" %></strong>
+          <strong data-preview-name><%= @preview[:next]&.dig(:name) || "Waiting" %></strong>
         </div>
         <% if @preview[:next] %>
-          <%= image_tag @preview[:next][:thumbnail_url], alt: @preview[:next][:name] %>
+          <%= image_tag @preview[:next][:thumbnail_url], alt: @preview[:next][:name], data: { preview_image: true } %>
         <% else %>
-          <div class="empty-preview">No image</div>
+          <div class="empty-preview" data-preview-empty>No image</div>
         <% end %>
       </article>
     </section>
