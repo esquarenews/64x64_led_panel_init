@@ -504,6 +504,16 @@ input[type="submit"].is-submitting {
   padding-top: 14px;
 }
 
+.pagination-action {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  line-height: 1;
+  min-width: 46px;
+  padding: 0 12px;
+  text-align: center;
+}
+
 .disabled-action {
   align-items: center;
   background: #eef1ec;

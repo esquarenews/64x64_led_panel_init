@@ -123,4 +123,17 @@ class ProductionConfigTest < ActiveSupport::TestCase
     assert_includes stylesheet, "min-width: 280px"
     assert_not_includes stylesheet, "max-width: 210px"
   end
+
+  test "pagination uses compact arrow controls" do
+    dashboard = Rails.root.join("app/views/dashboard/show.html.erb").read
+    stylesheet = Rails.root.join("app/assets/stylesheets/application.css").read
+
+    assert_includes dashboard, 'link_to "<<"'
+    assert_includes dashboard, 'link_to ">>"'
+    assert_includes dashboard, "pagination-action"
+    assert_not_includes dashboard, 'link_to "Previous"'
+    assert_not_includes dashboard, 'link_to "Next"'
+    assert_includes stylesheet, ".pagination-action"
+    assert_includes stylesheet, "justify-content: center"
+  end
 end

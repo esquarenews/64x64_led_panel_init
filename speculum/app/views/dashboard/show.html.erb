@@ -142,15 +142,15 @@
             <% previous_page = @image_page[:page] - 1 %>
             <% next_page = @image_page[:page] + 1 %>
             <% if previous_page.positive? %>
-              <%= link_to "Previous", root_path(page: previous_page), class: "secondary-action compact-action" %>
+              <%= link_to "<<", root_path(page: previous_page), class: "secondary-action compact-action pagination-action", aria: { label: "Previous page" } %>
             <% else %>
-              <span class="disabled-action">Previous</span>
+              <span class="disabled-action pagination-action" aria-label="Previous page">&lt;&lt;</span>
             <% end %>
             <span>Page <%= @image_page[:page] %></span>
             <% if @image_page[:has_next] %>
-              <%= link_to "Next", root_path(page: next_page), class: "secondary-action compact-action" %>
+              <%= link_to ">>", root_path(page: next_page), class: "secondary-action compact-action pagination-action", aria: { label: "Next page" } %>
             <% else %>
-              <span class="disabled-action">Next</span>
+              <span class="disabled-action pagination-action" aria-label="Next page">&gt;&gt;</span>
             <% end %>
           </nav>
         <% end %>
